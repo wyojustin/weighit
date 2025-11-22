@@ -48,20 +48,39 @@ def get_sources() -> List[str]:
     return sorted(logger_core.get_sources_dict().keys())
 
 @st.cache_data(ttl=60.0)
-def get_types() -> List[str]:
-    return list(logger_core.get_types_dict().keys())
+def get_types() -> List[dict]:
+    """Returns list of type info dicts with name and requires_temp flag"""
+    types_dict = logger_core.get_types_dict()
+    types_list = []
+    for name, info in types_dict.items():
+        types_list.append({
+            "name": name,
+            "sort_order": info["sort_order"],
+            "requires_temp": info["requires_temp"]
+        })
+    return sorted(types_list, key=lambda x: x["sort_order"])
 
 def get_daily_totals_line() -> str:
-    totals = db_backend.get_daily_totals()
-    if not totals:
-        return "Today: 0.0 lbs"
-    parts = [f"{k}: {v:.1f}" for k, v in totals.items()]
+    current_source = st.session_state.get("source", None)
+    totals = db_backend.get_daily_totals(source=current_source)
+    
+    # Get all types to show them all (even if 0.0)
+    all_types = get_types()
+    
+    # Build parts list with all types in order
+    parts = []
+    for type_info in all_types:
+        type_name = type_info["name"]
+        weight = totals.get(type_name, 0.0)
+        parts.append(f"{type_name}: {weight:.1f}")
+    
     return " | ".join(parts)
 
 def get_history_html() -> str:
-    """Generates a fixed-height table with exactly 15 rows."""
+    """Generates a fixed-height table with exactly 15 rows filtered by current source."""
     limit = 15
-    entries = logger_core.get_recent_entries(limit)
+    current_source = st.session_state.get("source", None)
+    entries = logger_core.get_recent_entries(limit, source=current_source)
     
     rows_html = ""
     
@@ -73,11 +92,21 @@ def get_history_html() -> str:
         except Exception:
             ts_str = row["timestamp"]
 
+        # Add temperature info if present
+        temp_info = ""
+        if row.get("temp_pickup_f") is not None or row.get("temp_dropoff_f") is not None:
+            temps = []
+            if row.get("temp_pickup_f") is not None:
+                temps.append(f"Pick:{row['temp_pickup_f']:.1f}°F")
+            if row.get("temp_dropoff_f") is not None:
+                temps.append(f"Drop:{row['temp_dropoff_f']:.1f}°F")
+            temp_info = f" ({', '.join(temps)})"
+
         rows_html += (
             f"<tr>"
             f"<td>{ts_str}</td>"
             f"<td>{row['source']}</td>"
-            f"<td>{row['type']}</td>"
+            f"<td>{row['type']}{temp_info}</td>"
             f"<td>{row['weight_lb']:.2f} lb</td>"
             f"<td>Logged</td>"
             f"</tr>"
@@ -104,7 +133,7 @@ def load_logo(path: Path, height_px: int = 100) -> Optional[Image.Image]:
     scale = height_px / float(h)
     return img.resize((int(w * scale), height_px), Image.LANCZOS)
 
-def chunk_types(types: List[str]) -> List[List[str]]:
+def chunk_types(types: List[dict]) -> List[List[dict]]:
     if len(types) == 0: return []
     if len(types) <= 8: return [types]
     mid = (len(types) + 1) // 2
@@ -114,11 +143,82 @@ def safe_rerun():
     if hasattr(st, "rerun"):
         st.rerun()
 
+@st.dialog("Temperature Recording")
+def temperature_dialog():
+    """Modal dialog for recording temperatures"""
+    entry = st.session_state.pending_entry
+    if not entry or st.session_state.get("dialog_processed", False):
+        st.session_state.show_temp_dialog = False
+        st.session_state.dialog_processed = False
+        st.rerun()
+        return
+    
+    type_name = entry["type"]
+    weight = entry["weight"]
+    source = entry["source"]
+    
+    st.write(f"Recording temperatures for **{type_name}**")
+    st.write(f"Weight: **{weight:.2f} lb** from **{source}**")
+    
+    st.divider()
+    
+    # Temperature inputs with number_input for better mobile experience
+    temp_pickup = st.number_input(
+        "Pickup Temperature (°F)",
+        min_value=-40.0,
+        max_value=200.0,
+        value=40.0,
+        step=1.0,
+        format="%.1f",
+        help="Temperature at pickup location",
+        key="temp_pickup_input"
+    )
+    
+    temp_dropoff = st.number_input(
+        "Dropoff Temperature (°F)",
+        min_value=-40.0,
+        max_value=200.0,
+        value=38.0,
+        step=1.0,
+        format="%.1f",
+        help="Temperature at dropoff/storage location",
+        key="temp_dropoff_input"
+    )
+    
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Cancel", use_container_width=True, key="cancel_temp"):
+            st.session_state.show_temp_dialog = False
+            st.session_state.pending_entry = None
+            st.session_state.dialog_processed = True
+            st.rerun()
+    
+    with col2:
+        if st.button("Save Entry", type="primary", use_container_width=True, key="save_temp"):
+            # Log the entry with temperatures
+            logger_core.log_entry(
+                weight, 
+                source, 
+                type_name,
+                temp_pickup_f=temp_pickup,
+                temp_dropoff_f=temp_dropoff
+            )
+            
+            # Mark as processed and clear
+            st.session_state.dialog_processed = True
+            st.session_state.show_temp_dialog = False
+            st.session_state.pending_entry = None
+            
+            # Force dialog to close
+            st.rerun()
+
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
 # Inject Keyboard Listener (Ctrl-Z / Ctrl-Y)
-# This JS finds the buttons by their text content and clicks them.
 components.html("""
 <script>
 const doc = window.parent.document;
@@ -225,6 +325,12 @@ with st.sidebar:
 # Session State Defaults
 if "last_refresh_t" not in st.session_state:
     st.session_state.last_refresh_t = 0.0
+if "show_temp_dialog" not in st.session_state:
+    st.session_state.show_temp_dialog = False
+if "pending_entry" not in st.session_state:
+    st.session_state.pending_entry = None
+if "dialog_processed" not in st.session_state:
+    st.session_state.dialog_processed = False
 
 # ---------------- MAIN UI ----------------
 
@@ -232,7 +338,7 @@ if "last_refresh_t" not in st.session_state:
 try:
     scale = get_scale()
     reading = scale.get_latest()
-    weight_str = f"{reading.value:.1f}" if reading and reading.unit == "lb" else "—"
+    weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
 except Exception:
     scale = None
     weight_str = "Err"
@@ -250,23 +356,84 @@ with c2:
 
 with c3:
     img = load_logo(SCALE_LOGO, height_px=110)
-    if img: st.image(img)
+    if img:
+        # Hidden button for refresh
+        if st.button("refresh_hidden", key="refresh_scale", help="Click scale to refresh"):
+            safe_rerun()
+        # Show image with click handler
+        st.image(img, use_container_width=False)
+
+# Inject JavaScript to make scale image clickable
+components.html("""
+<script>
+const doc = window.parent.document;
+
+// Find the scale refresh button and the scale image
+function makeScaleClickable() {
+    const buttons = Array.from(doc.querySelectorAll('button'));
+    const refreshBtn = buttons.find(el => el.innerText.includes("refresh_hidden"));
+    
+    if (refreshBtn) {
+        // Hide the button
+        refreshBtn.style.display = 'none';
+        
+        // Find scale image (it's in the last column)
+        const images = Array.from(doc.querySelectorAll('img'));
+        const scaleImg = images[images.length - 1]; // Last image should be scale
+        
+        if (scaleImg) {
+            scaleImg.style.cursor = 'pointer';
+            scaleImg.onclick = function() {
+                refreshBtn.click();
+            };
+        }
+    }
+}
+
+// Run after page loads
+setTimeout(makeScaleClickable, 100);
+</script>
+""", height=0, width=0)
 
 # 3. Buttons
 types = get_types()
 rows = chunk_types(types)
 
-def on_log(tname):
+def on_log(type_info):
+    """Handle button click - check if temperature is required"""
     r = scale.read_stable_weight(timeout_s=0.5) if scale else None
     if r and r.unit == "lb":
         if r.value > 0.0:
             src = st.session_state.source
-            logger_core.log_entry(r.value, src, tname)
+            
+            # Check if this type requires temperature
+            if type_info["requires_temp"]:
+                # Store pending entry and show dialog
+                st.session_state.pending_entry = {
+                    "weight": r.value,
+                    "source": src,
+                    "type": type_info["name"]
+                }
+                st.session_state.show_temp_dialog = True
+                st.session_state.dialog_processed = False  # Reset the flag
+            else:
+                # Log directly without temperature
+                logger_core.log_entry(r.value, src, type_info["name"])
 
 for i, row in enumerate(rows):
     cols = st.columns(len(row), gap="small")
-    for idx, tname in enumerate(row):
-        cols[idx].button(tname, on_click=on_log, args=(tname,), use_container_width=True, key=f"btn_{i}_{idx}")
+    for idx, type_info in enumerate(row):
+        cols[idx].button(
+            type_info["name"], 
+            on_click=on_log, 
+            args=(type_info,), 
+            use_container_width=True, 
+            key=f"btn_{i}_{idx}"
+        )
+
+# Show temperature dialog if needed
+if st.session_state.get("show_temp_dialog", False):
+    temperature_dialog()
 
 # 4. Daily Totals
 totals_ph = st.empty()
@@ -276,10 +443,14 @@ totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', u
 history_ph = st.empty()
 history_ph.markdown(get_history_html(), unsafe_allow_html=True)
 
-# 6. Auto-Refresh
+# 6. Auto-Refresh - DISABLED when dialog exists
+# The dialog and auto-refresh conflict, so we disable auto-refresh
+# Users can manually click buttons to refresh
+# Uncomment below if you want auto-refresh back (but dialog won't work properly)
+junk = """
 now = time.time()
 if (now - st.session_state.last_refresh_t) > 0.5:
     st.session_state.last_refresh_t = now
     time.sleep(0.5)
     safe_rerun()
-
+"""

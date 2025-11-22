@@ -1,0 +1,1606 @@
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/list_files.py
+================================================================================
+import os
+from pathlib import Path
+
+def print_project_files():
+    """
+    Recursively finds all .py files in the current directory,
+    skipping virtual environments and cache folders, and prints
+    their contents with clear delimiters.
+    """
+    # The directory where this script is running
+    root_dir = Path.cwd()
+
+    # Directories to exclude to avoid huge output dump
+    EXCLUDE_DIRS = {
+        '.venv', 'venv', 'env', '.git', 
+        '__pycache__', '.pytest_cache', 
+        'build', 'dist', 'egg-info'
+    }
+
+    # Gather files
+    py_files = []
+    for path in root_dir.rglob('*.py'):
+        # Skip if the file is inside an excluded directory
+        # path.parts splits the path (e.g., /home/user/project/venv/lib...)
+        if not set(path.parts).intersection(EXCLUDE_DIRS):
+            # Don't print this script itself
+            if path.name != Path(__file__).name:
+                py_files.append(path)
+
+    # Sort alphabetically for easier reading
+    py_files.sort()
+
+    for file_path in py_files:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            # --- The Formatting ---
+            print("\n" + "="*80)
+            print(f"# FILE PATH: {file_path.absolute()}")
+            print("="*80)
+            print(content)
+            print("\n")
+            
+        except Exception as e:
+            print(f"# ERROR READING {file_path.name}: {e}")
+
+if __name__ == "__main__":
+    print_project_files()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/__init__.py
+================================================================================
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/app.py
+================================================================================
+# src/weigh/app.py
+from __future__ import annotations
+
+import time
+import textwrap
+from datetime import datetime, date, timezone
+from pathlib import Path
+from typing import List, Optional
+
+import streamlit as st
+import streamlit.components.v1 as components
+from PIL import Image
+
+# ---- local imports ----
+try:
+    import logger_core
+    import report_utils
+    import db_backend
+    import scale_backend
+except Exception:
+    from weigh import logger_core, report_utils, db_backend, scale_backend
+
+ASSETS_DIR = Path(__file__).parent / "assets"
+STYLE_CSS = ASSETS_DIR / "style.css"
+PANTRY_LOGO = ASSETS_DIR / "slfp_logo.png"
+SCALE_LOGO = ASSETS_DIR / "scale_icon.png"
+
+# ---------------- Streamlit page config ----------------
+st.set_page_config(
+    page_title="Weigh Kiosk",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# ---------------- helpers ----------------
+
+def load_css(css_path: Path):
+    if css_path.exists():
+        with open(css_path) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+@st.cache_resource
+def get_scale() -> "scale_backend.DymoHIDScale":
+    return scale_backend.DymoHIDScale()
+
+@st.cache_data(ttl=60.0)
+def get_sources() -> List[str]:
+    return sorted(logger_core.get_sources_dict().keys())
+
+@st.cache_data(ttl=60.0)
+def get_types() -> List[str]:
+    return list(logger_core.get_types_dict().keys())
+
+def get_daily_totals_line() -> str:
+    totals = db_backend.get_daily_totals()
+    if not totals:
+        return "Today: 0.0 lbs"
+    parts = [f"{k}: {v:.1f}" for k, v in totals.items()]
+    return " | ".join(parts)
+
+def get_history_html() -> str:
+    """Generates a fixed-height table with exactly 15 rows."""
+    limit = 15
+    entries = logger_core.get_recent_entries(limit)
+    
+    rows_html = ""
+    
+    # 1. Render actual data rows
+    for row in entries:
+        try:
+            dt = datetime.fromisoformat(row["timestamp"]).astimezone()
+            ts_str = dt.strftime("%H:%M")
+        except Exception:
+            ts_str = row["timestamp"]
+
+        rows_html += (
+            f"<tr>"
+            f"<td>{ts_str}</td>"
+            f"<td>{row['source']}</td>"
+            f"<td>{row['type']}</td>"
+            f"<td>{row['weight_lb']:.2f} lb</td>"
+            f"<td>Logged</td>"
+            f"</tr>"
+        )
+    
+    # 2. Render blank filler rows to maintain constant height
+    slots_needed = limit - len(entries)
+    if slots_needed > 0:
+        blank_row = "<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>"
+        rows_html += blank_row * slots_needed
+
+    return (
+        f'<table class="history-table">'
+        f'<thead><tr><th>Time</th><th>Source</th><th>Type</th><th>Weight</th><th>Action</th></tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        f'</table>'
+    )
+
+def load_logo(path: Path, height_px: int = 100) -> Optional[Image.Image]:
+    if not path.exists():
+        return None
+    img = Image.open(path).convert("RGBA")
+    w, h = img.size
+    scale = height_px / float(h)
+    return img.resize((int(w * scale), height_px), Image.LANCZOS)
+
+def chunk_types(types: List[str]) -> List[List[str]]:
+    if len(types) == 0: return []
+    if len(types) <= 8: return [types]
+    mid = (len(types) + 1) // 2
+    return [types[:mid], types[mid:]]
+
+def safe_rerun():
+    if hasattr(st, "rerun"):
+        st.rerun()
+
+# ---------------- INIT ----------------
+load_css(STYLE_CSS)
+
+# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y)
+# This JS finds the buttons by their text content and clicks them.
+components.html("""
+<script>
+const doc = window.parent.document;
+doc.addEventListener('keydown', function(e) {
+    // Ctrl+Z = Undo
+    if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+        const buttons = Array.from(doc.querySelectorAll('button'));
+        const undoBtn = buttons.find(el => el.innerText.includes("Undo Last Entry"));
+        if (undoBtn) {
+            undoBtn.click();
+        }
+    }
+    // Ctrl+Y = Redo
+    if (e.ctrlKey && e.key.toLowerCase() === 'y') {
+        const buttons = Array.from(doc.querySelectorAll('button'));
+        const redoBtn = buttons.find(el => el.innerText.includes("Redo Last Undo"));
+        if (redoBtn) {
+            redoBtn.click();
+        }
+    }
+});
+</script>
+""", height=0, width=0)
+
+
+# Sidebar
+with st.sidebar:
+    st.header("Admin")
+    sources = get_sources()
+    
+    if "source" not in st.session_state:
+        st.session_state.source = sources[0] if sources else "Unknown"
+    
+    current_idx = 0
+    if st.session_state.source in sources:
+        current_idx = sources.index(st.session_state.source)
+        
+    st.session_state.source = st.selectbox("Source", sources, index=current_idx)
+    
+    st.divider()
+    
+    # --- Undo / Redo ---
+    c_undo, c_redo = st.columns(2)
+    with c_undo:
+        if st.button("Undo Last Entry"):
+            logger_core.undo_last_entry()
+            safe_rerun()
+    with c_redo:
+        if st.button("Redo Last Undo"):
+            logger_core.redo_last_entry()
+            safe_rerun()
+
+    st.divider()
+    
+    # --- REPORTING SECTION ---
+    st.subheader("Send Report")
+    
+    today = datetime.now(timezone.utc).date()
+    d_start = st.date_input("Start Date", value=today)
+    d_end = st.date_input("End Date", value=today)
+    
+    default_email = ""
+    try:
+        default_email = st.secrets["email"]["default_recipient"]
+    except Exception:
+        pass
+
+    recipient = st.text_input("Recipient Email", value=default_email)
+
+    # EMAIL BUTTON
+    if st.button("Email CSV", type="primary"):
+        if not recipient:
+            st.error("Enter an email address.")
+        else:
+            with st.spinner("Sending email..."):
+                try:
+                    csv_bytes = report_utils.generate_report_csv(
+                        d_start.isoformat(), d_end.isoformat()
+                    )
+                    fname = f"report_{d_start}_{d_end}.csv"
+                    
+                    report_utils.send_email_with_attachment(
+                        to_email=recipient,
+                        subject=f"Donation Report: {d_start} - {d_end}",
+                        body=f"Attached is the donation log for {d_start} to {d_end}.",
+                        attachment_bytes=csv_bytes,
+                        filename=fname
+                    )
+                    st.success("Email Sent!")
+                    time.sleep(2) 
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    st.caption("Or download directly:")
+    csv_bytes_dl = report_utils.generate_report_csv(d_start.isoformat(), d_end.isoformat())
+    st.download_button(
+        "Download CSV",
+        csv_bytes_dl,
+        f"report_{d_start}_{d_end}.csv",
+        "text/csv",
+        use_container_width=True
+    )
+
+# Session State Defaults
+if "last_refresh_t" not in st.session_state:
+    st.session_state.last_refresh_t = 0.0
+
+# ---------------- MAIN UI ----------------
+
+# 1. Get Weight
+try:
+    scale = get_scale()
+    reading = scale.get_latest()
+    weight_str = f"{reading.value:.1f}" if reading and reading.unit == "lb" else "—"
+except Exception:
+    scale = None
+    weight_str = "Err"
+
+# 2. Top Row: Logo | Weight | Logo
+c1, c2, c3 = st.columns([1, 5, 1], gap="small", vertical_alignment="center")
+
+with c1:
+    img = load_logo(PANTRY_LOGO, height_px=110)
+    if img: st.image(img)
+
+with c2:
+    weight_ph = st.empty()
+    weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
+
+with c3:
+    img = load_logo(SCALE_LOGO, height_px=110)
+    if img: st.image(img)
+
+# 3. Buttons
+types = get_types()
+rows = chunk_types(types)
+
+def on_log(tname):
+    r = scale.read_stable_weight(timeout_s=0.5) if scale else None
+    if r and r.unit == "lb":
+        if r.value > 0.0:
+            src = st.session_state.source
+            logger_core.log_entry(r.value, src, tname)
+
+for i, row in enumerate(rows):
+    cols = st.columns(len(row), gap="small")
+    for idx, tname in enumerate(row):
+        cols[idx].button(tname, on_click=on_log, args=(tname,), use_container_width=True, key=f"btn_{i}_{idx}")
+
+# 4. Daily Totals
+totals_ph = st.empty()
+totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', unsafe_allow_html=True)
+
+# 5. History Table
+history_ph = st.empty()
+history_ph.markdown(get_history_html(), unsafe_allow_html=True)
+
+# 6. Auto-Refresh
+now = time.time()
+if (now - st.session_state.last_refresh_t) > 0.5:
+    st.session_state.last_refresh_t = now
+    time.sleep(0.5)
+    safe_rerun()
+
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/assets/style.css
+================================================================================
+/* assets/style.css */
+
+/* --- GLOBAL LAYOUT --- */
+.block-container {
+    padding-top: 3rem !important; 
+    padding-bottom: 1rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 100% !important;
+}
+
+div[data-testid="stVerticalBlock"] {
+    gap: 0.2rem !important;
+}
+
+/* --- BUTTONS --- */
+.stButton > button {
+    padding: 0px !important;
+    height: 80px !important;
+    font-size: 24px !important;
+    border-radius: 12px;
+    font-weight: 600;
+    width: 100%;
+    margin: 0px !important; 
+}
+
+/* --- WEIGHT DISPLAY --- */
+.weight-box {
+    font-size: 160px; 
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.0;
+    margin-bottom: 10px;
+    font-family: "Source Sans Pro", sans-serif;
+    color: inherit; 
+}
+
+/* --- TOTALS TEXT --- */
+.totals-box {
+    text-align: center;
+    font-size: 20px;
+    color: #808080;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* --- HISTORY TABLE --- */
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px !important;
+    margin-top: 5px;
+    font-family: sans-serif;
+    table-layout: fixed; /* Keeps columns stable */
+}
+
+.history-table th {
+    text-align: left;
+    color: #888;
+    border-bottom: 2px solid #ddd;
+    padding: 4px;
+    font-weight: 600;
+}
+
+.history-table td {
+    padding: 2px 4px;
+    border-bottom: 1px solid #f0f0f0;
+    color: inherit;
+    height: 24px; /* FORCE FIXED HEIGHT */
+    vertical-align: middle;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+/* --- LOGOS --- */
+div[data-testid="stImage"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/cli_weigh.py
+================================================================================
+# cli_weigh.py  — Click-based CLI for the weigh system
+
+import click
+from weigh import dao
+from weigh.logger_core import (
+    log_entry,
+    undo_last_entry,
+    totals_today_weight,
+    get_last_logs,
+    get_sources_dict,
+    get_types_dict,
+)
+
+
+# =====================================================
+# ROOT COMMAND
+# =====================================================
+
+@click.group()
+def cli():
+    """Weigh CLI tool — log, manage, and inspect food donations."""
+    pass
+
+
+# =====================================================
+# LOGGING COMMANDS
+# =====================================================
+
+@cli.command()
+@click.argument("source")
+@click.argument("type")
+@click.argument("weight", type=float)
+def log(source, type, weight):
+    """
+    Log a new weight entry.
+
+    Example:
+        weigh log "Trader Joe's" Produce 5.4
+    """
+    log_entry(weight, source, type)
+    click.echo(f"Logged {weight:.2f} lb from '{source}' as '{type}'")
+
+
+@cli.command()
+def undo():
+    """Undo the most recent log entry."""
+    row = undo_last_entry()
+    if row:
+        click.echo(f"Removed entry: {row}")
+    else:
+        click.echo("No entries to undo.")
+
+
+@cli.command()
+def totals():
+    """Show today's total logged weight."""
+    total = totals_today_weight()
+    click.echo(f"Today's total: {total:.2f} lb")
+
+
+@cli.command()
+@click.option("-n", default=10, help="Number of rows to show")
+def tail(n):
+    """Show the last N log entries."""
+    rows = get_last_logs(n)
+    for r in rows:
+        click.echo(dict(r))
+
+
+# =====================================================
+# SOURCE MANAGEMENT
+# =====================================================
+
+@cli.group()
+def source():
+    """Manage food donation sources."""
+    pass
+
+
+@source.command("list")
+def source_list():
+    """List all sources."""
+    for s in dao.get_sources():
+        click.echo(f"{s['id']:2d}  {s['name']}")
+
+
+@source.command("add")
+@click.argument("name")
+def source_add(name):
+    """Add a new donation source."""
+    dao.add_source(name)
+    click.echo(f"Added source: {name}")
+
+
+# =====================================================
+# TYPE MANAGEMENT
+# =====================================================
+
+@cli.group()
+def type():
+    """Manage food types."""
+    pass
+
+
+@type.command("list")
+def type_list():
+    """List all food types."""
+    for t in dao.get_types():
+        click.echo(f"{t['id']:2d}  {t['name']}")
+
+
+@type.command("add")
+@click.argument("name")
+def type_add(name):
+    """Add a new food type."""
+    dao.add_type(name)
+    click.echo(f"Added type: {name}")
+
+
+# =====================================================
+# ENTRY POINT
+# =====================================================
+
+def main():
+    """Entry point for the installed `weigh` console script."""
+    cli(standalone_mode=False)
+    
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/dao.py
+================================================================================
+# dao.py
+from weigh.db import get_conn
+
+def add_source(name: str):
+    """Add a new source if not already present."""
+    conn = get_conn()
+    conn.execute("INSERT OR IGNORE INTO sources (name) VALUES (?)", (name,))
+    conn.commit()
+
+def get_sources():
+    """Return all sources (id, name)."""
+    conn = get_conn()
+    return conn.execute("SELECT id, name FROM sources ORDER BY id").fetchall()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/db.py
+================================================================================
+# db.py – Streamlit-safe SQLite access layer
+
+import sqlite3
+import os
+from threading import Lock
+
+# -------------------------------------------------------------------
+# Global configuration (overridden by tests and Streamlit at startup)
+# -------------------------------------------------------------------
+
+DB_PATH = None
+SCHEMA_PATH = None
+
+# IMPORTANT:
+# We no longer keep a long-lived connection in memory.
+# Each call to get_conn() returns a NEW connection.
+# This avoids Streamlit's “SQLite objects created in a thread…”
+# errors entirely.
+#
+# However, schema initialization must be thread-safe:
+_init_lock = Lock()
+_schema_initialized = False
+
+
+# -------------------------------------------------------------------
+# Utility
+# -------------------------------------------------------------------
+
+def set_defaults_if_needed():
+    """Assign default paths unless tests or app override them."""
+    global DB_PATH, SCHEMA_PATH
+
+    if DB_PATH is None:
+        DB_PATH = os.path.expanduser("~/weighit/weigh.db")
+
+    if SCHEMA_PATH is None:
+        here = os.path.dirname(__file__)
+        SCHEMA_PATH = os.path.join(here, "schema.sql")
+
+
+# -------------------------------------------------------------------
+# Schema initialization
+# -------------------------------------------------------------------
+
+def initialize_schema_if_needed():
+    """
+    Ensure tables exist. Thread-safe. Called inside get_conn().
+    Only runs once per process.
+    """
+    global _schema_initialized
+    if _schema_initialized:
+        return
+
+    with _init_lock:
+        if _schema_initialized:
+            return
+
+        set_defaults_if_needed()
+        
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            # --- FIX START ---
+            # Check if a key table (e.g., 'logs') already exists.
+            # If it does, assume the DB is initialized and DO NOT run schema.sql.
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='logs'"
+            )
+            if cur.fetchone() is None:
+                # Table missing? Run the schema to create everything.
+                if os.path.exists(SCHEMA_PATH):
+                    with open(SCHEMA_PATH, "r") as f:
+                        conn.executescript(f.read())
+                    conn.commit()
+            # --- FIX END ---
+        finally:
+            conn.close()
+
+        _schema_initialized = True
+
+
+def init_db():
+    """Force regenerate schema (only used manually or by tests)."""
+    set_defaults_if_needed()
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        with open(SCHEMA_PATH, "r") as f:
+            conn.executescript(f.read())
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_for_test(db_path, schema_path):
+    """
+    Test harness uses this to override the DB file.
+    Always forces schema rebuild.
+    """
+    global DB_PATH, SCHEMA_PATH, _schema_initialized
+    DB_PATH = db_path
+    SCHEMA_PATH = schema_path
+    
+    # Reset flag so next connection knows to respect new paths
+    _schema_initialized = False
+    
+    # Force creation immediately
+    init_db()
+
+
+# -------------------------------------------------------------------
+# Connection Management (STREAMLIT SAFE)
+# -------------------------------------------------------------------
+
+def get_conn():
+    """
+    Return a fresh SQLite connection every time.
+    Streamlit runs code in multiple threads, so keeping a global
+    connection is unsafe. Each call gets a new connection with:
+
+        conn.row_factory = sqlite3.Row
+
+    Caller is responsible for closing the connection OR relying on
+    context managers.
+    """
+    initialize_schema_if_needed()
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# -------------------------------------------------------------------
+# Query helpers
+# -------------------------------------------------------------------
+
+def fetch_sources():
+    conn = get_conn()
+    try:
+        return conn.execute(
+            "SELECT id, name FROM sources ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def fetch_types():
+    conn = get_conn()
+    try:
+        return conn.execute(
+            "SELECT id, name, sort_order FROM types ORDER BY sort_order"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/db_backend.py
+================================================================================
+# db_backend.py
+# Thin wrapper around logger_core + db for Streamlit UI
+
+from weigh import logger_core
+from weigh import db
+
+# ---------------------
+# SOURCE / TYPE LISTING
+# ---------------------
+
+def list_sources():
+    """Return list of source names."""
+    rows = logger_core.get_sources_dict()
+    return list(rows.keys())
+
+
+def list_types():
+    """Return list of type names sorted by sort_order."""
+    rows = logger_core.get_types_dict()
+    return list(rows.keys())
+
+
+# ---------------------
+# DAILY TOTALS
+# ---------------------
+
+def get_daily_totals():
+    """
+    Returns dict: {type_name: total_weight_lbs}
+    """
+    return logger_core.totals_today_weight_per_type()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/font_test.py
+================================================================================
+import tkinter as tk
+import tkinter.font as tkfont
+
+root = tk.Tk()
+
+# Try switching 1.0, 1.5, 2.0, 2.5, 3.0
+root.tk.call("tk", "scaling", 2.0)
+
+for size in [20, 40, 80]:
+    tk.Label(root, text=f"Size {size}", font=("Helvetica", size)).pack()
+
+root.mainloop()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/font_test_2.py
+================================================================================
+import tkinter as tk
+print(tk.Tk().tk.call("font", "metrics", "TkDefaultFont"))
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/gui.py
+================================================================================
+import tkinter as tk
+from tkinter import ttk
+from PIL import Image, ImageTk
+from .logger_core import (
+    log_entry,
+    undo_last_entry,
+    totals_today_weight,
+    get_sources_dict,
+    get_types_dict,
+)
+import threading
+import time
+import os
+import sys
+
+
+ASSET_DIR = os.path.join(os.path.dirname(__file__), "assets")
+
+
+def load_asset(name):
+    return Image.open(os.path.join(ASSET_DIR, name))
+
+
+class WeighGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+
+        self.option_add("*Font", "Noto Sans 40")
+        self.option_add("*Button.Font", "Noto Sans 32")
+        self.option_add("*Label.Font", "Noto Sans 40")
+        self.option_add("*Font", "helvetica 40")
+        
+        
+        # Make fullscreen
+        self.attributes("-fullscreen", True)
+        
+        # Allow ESC to close
+        self.bind("<Escape>", lambda e: self.destroy())
+
+        self.tk.call("tk", "scaling", 1.4)
+        self.title("PineTab Food Logger")
+        self.geometry("1280x800")
+        self.configure(bg="white")
+
+        self.current_weight = tk.DoubleVar(value=0.00)
+
+        self.build_top_row()
+        self.build_middle_row()
+        self.build_bottom_row()
+        self.build_bottom_controls()
+        
+        # simulate scale polling
+        self.poll_scale()
+
+    # -------------------------------------------------------
+
+    def build_top_row(self):
+        frame = tk.Frame(self, bg="white")
+        frame.pack(fill="x", pady=10)
+
+        # Pantry logo
+        slfp = load_asset("slfp_logo.png")
+        slfp.thumbnail((9999, 300))
+        
+        slfp_img = ImageTk.PhotoImage(slfp)
+        self.slfp_img = slfp_img  # keep reference
+        tk.Label(frame, image=slfp_img, bg="white").pack(side="left", padx=20)
+
+        # Weight display
+        self.weight_label = tk.Label(
+            frame,
+            text="0.00 lb",
+            font=("Helvetica", 48, "bold"),
+            bg="white",
+        )
+        self.weight_label.pack(side="left", expand=True)
+
+        # Scale icon
+        scale = load_asset("scale_icon.png")
+        scale.thumbnail((9999, 300))
+        scale_img = ImageTk.PhotoImage(scale)
+        self.scale_img = scale_img
+        tk.Label(frame, image=scale_img, bg="white").pack(side="right", padx=20)
+
+    # -------------------------------------------------------
+
+    def build_middle_row(self):
+        frame = tk.Frame(self, bg="white")
+        frame.pack(fill="x", pady=20)
+
+        # Source dropdown
+        tk.Label(frame, text="Source:", font=("Helvetica", 20), bg="white").pack(side="left", padx=10)
+
+        self.source_var = tk.StringVar()
+        self.source_dropdown = ttk.Combobox(
+            frame,
+            textvariable=self.source_var,
+            state="readonly",
+            width=20,
+            font=("Helvetica", 20),
+            values=list(get_sources_dict().keys())
+        )
+        self.source_dropdown.pack(side="left", padx=10)
+
+        types = list(get_types_dict().keys())
+
+        for t in types:
+            btn = tk.Button(
+                frame,
+                text=t,
+                font=("Helvetica", 18),
+                width=10,
+                height=2,
+                command=lambda ty=t: self.log_type(ty),
+            )
+            btn.pack(side="left", padx=10)
+
+    # -------------------------------------------------------
+
+    def build_bottom_row(self):
+        frame = tk.Frame(self, bg="white")
+        frame.pack(fill="x", pady=20)
+
+        self.daily_label = tk.Label(
+            frame,
+            text="Daily Total: 0.00 lb",
+            font=("Helvetica", 24),
+            bg="white",
+        )
+        self.daily_label.pack()
+
+    # -------------------------------------------------------
+
+    def build_bottom_controls(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", pady=15)
+
+        quit_btn = ttk.Button(frame, text="CLOSE", command=self.destroy)
+        quit_btn.pack(side="left", expand=True, fill="x", padx=20)
+
+        reset_btn = ttk.Button(frame, text="RESET", command=self.reset_ui)
+        reset_btn.pack(side="right", expand=True, fill="x", padx=20)
+
+    def log_type(self, food_type):
+        src = self.source_var.get()
+        if not src:
+            return
+
+        log_entry(self.current_weight.get(), src, food_type)
+        self.update_daily_totals()
+
+    # -------------------------------------------------------
+
+    def update_daily_totals(self):
+        total = totals_today_weight()
+        self.daily_label.configure(text=f"Daily Total: {total:.2f} lb")
+
+    # -------------------------------------------------------
+
+    def poll_scale(self):
+        # Placeholder for real HID interface
+        # For now display small noise
+        new_weight = round((time.time() % 10) + 0.17, 2)
+        self.current_weight.set(new_weight)
+        self.weight_label.configure(text=f"{new_weight:.2f} lb")
+
+        self.after(500, self.poll_scale)
+
+    def reset_ui(self):
+        self.weight_var.set("0.0")
+        if self.source_values:
+            self.source_var.set(self.source_values[0])
+
+# ---------------------------------------------------------------
+
+def main():
+    app = WeighGUI()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/logger_core.py
+================================================================================
+# src/weigh/logger_core.py
+from datetime import datetime, UTC
+from weigh.db import get_conn, fetch_sources, fetch_types
+
+def get_logs_between(start_date: str, end_date: str):
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT l.id, l.timestamp, l.weight_lb, l.source_id, l.type_id,
+               s.name AS source, t.name AS type
+        FROM logs l
+        JOIN sources s ON l.source_id = s.id
+        JOIN types t   ON l.type_id = t.id
+        WHERE DATE(l.timestamp) BETWEEN ? AND ?
+          AND l.deleted = 0
+        ORDER BY l.timestamp ASC;
+    """, (start_date, end_date)).fetchall()
+    return [dict(row) for row in rows]
+
+def get_recent_entries(limit: int = 5):
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT l.timestamp, l.weight_lb, s.name as source, t.name as type
+        FROM logs l
+        JOIN sources s ON l.source_id = s.id
+        JOIN types t   ON l.type_id = t.id
+        WHERE l.deleted = 0
+        ORDER BY l.id DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+def totals_today_weight_per_type():
+    conn = get_conn()
+    today = datetime.now(UTC).date().isoformat()
+    rows = conn.execute("""
+        SELECT t.name, SUM(l.weight_lb) as total
+        FROM logs l
+        JOIN types t ON l.type_id = t.id
+        WHERE DATE(l.timestamp) = ?
+          AND l.deleted = 0
+        GROUP BY t.name
+        ORDER BY t.sort_order;
+    """, (today,)).fetchall()
+    return {row["name"]: row["total"] if row["total"] else 0.0 for row in rows}
+
+def get_sources_dict():
+    return {row["name"]: row["id"] for row in fetch_sources()}
+
+def get_types_dict():
+    return {row["name"]: row["id"] for row in fetch_types()}
+
+def log_entry(weight_lb: float, source: str, type_: str):
+    conn = get_conn()
+    sources = get_sources_dict()
+    types = get_types_dict()
+    ts = datetime.now(UTC).isoformat()
+    conn.execute("""
+        INSERT INTO logs (timestamp, weight_lb, source_id, type_id, deleted)
+        VALUES (?, ?, ?, ?, 0)
+    """, (ts, weight_lb, sources[source], types[type_]))
+    conn.commit()
+
+def undo_last_entry():
+    conn = get_conn()
+    # Find most recent ACTIVE entry
+    row = conn.execute(
+        "SELECT id FROM logs WHERE deleted=0 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+    if not row:
+        return None
+
+    conn.execute("UPDATE logs SET deleted=1 WHERE id=?", (row["id"],))
+    conn.commit()
+    return row["id"]
+
+def redo_last_entry():
+    conn = get_conn()
+    # Find most recent DELETED entry (acting as a redo stack)
+    row = conn.execute(
+        "SELECT id FROM logs WHERE deleted=1 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+
+    if not row:
+        return None
+
+    conn.execute("UPDATE logs SET deleted=0 WHERE id=?", (row["id"],))
+    conn.commit()
+    return row["id"]
+
+def get_last_logs(n=10):
+    conn = get_conn()
+    return conn.execute(
+        "SELECT * FROM logs ORDER BY id DESC LIMIT ?", (n,)
+    ).fetchall()
+
+def totals_today_weight():
+    conn = get_conn()
+    today = datetime.now(UTC).date().isoformat()
+    row = conn.execute("""
+        SELECT SUM(weight_lb)
+        FROM logs
+        WHERE deleted=0 AND date(timestamp)=?
+    """, (today,)).fetchone()
+    return row[0] or 0.0
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/report_utils.py
+================================================================================
+# src/weigh/report_utils.py
+import csv
+import io
+import smtplib
+from collections import defaultdict
+import streamlit as st
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email import encoders
+import logger_core
+
+def generate_report_csv(start_date, end_date):
+    # 1. Fetch Data
+    logs = logger_core.get_logs_between(start_date, end_date)
+    
+    # 2. Calculate Summaries: totals[source][type] = weight
+    totals = defaultdict(lambda: defaultdict(float))
+    for row in logs:
+        totals[row["source"]][row["type"]] += row["weight_lb"]
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    
+    # 3. Write Summary Section
+    writer.writerow(["SUMMARY REPORT", f"{start_date} to {end_date}"])
+    writer.writerow([]) # Blank line
+    
+    writer.writerow(["Source", "Type", "Total Weight (lb)"])
+    
+    # Sort alphabetically by Source, then Type
+    for src in sorted(totals.keys()):
+        for typ in sorted(totals[src].keys()):
+            weight = totals[src][typ]
+            writer.writerow([src, typ, f"{weight:.2f}"])
+            
+    writer.writerow([]) # Blank lines to separate sections
+    writer.writerow([])
+    
+    # 4. Write Detailed Section
+    writer.writerow(["DETAILED LOGS"])
+    writer.writerow(["Timestamp", "Source", "Type", "Weight (lb)"])
+
+    for row in logs:
+        writer.writerow([row["timestamp"], row["source"], row["type"], row["weight_lb"]])
+
+    return buf.getvalue().encode("utf-8")
+
+def send_email_with_attachment(to_email, subject, body, attachment_bytes, filename):
+    """
+    Sends an email using credentials from .streamlit/secrets.toml
+    """
+    # 1. Load Secrets
+    try:
+        secrets = st.secrets["email"]
+        SMTP_SERVER = secrets["smtp_server"]
+        SMTP_PORT = secrets["smtp_port"]
+        SENDER_EMAIL = secrets["sender_email"]
+        SENDER_PASSWORD = secrets["sender_password"]
+    except Exception:
+        raise ValueError("Secrets not configured. Check .streamlit/secrets.toml")
+
+    # 2. Setup Message
+    msg = MIMEMultipart()
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
+
+    # 3. Attach CSV
+    part = MIMEBase('application', 'octet-stream')
+    part.set_payload(attachment_bytes)
+    encoders.encode_base64(part)
+    part.add_header(
+        'Content-Disposition',
+        f'attachment; filename="{filename}"',
+    )
+    msg.attach(part)
+
+    # 4. Connect & Send
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.send_message(msg)
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/scale_backend.py
+================================================================================
+#!/usr/bin/env python
+# scale_backend.py
+
+import time
+import threading
+from dataclasses import dataclass
+from typing import Optional
+
+import hid  # from hidapi
+
+VENDOR_ID = 0x0922
+PRODUCT_ID = 0x8009  # Dymo S250 / S100 family
+
+
+@dataclass
+class ScaleReading:
+    value: float    # numeric value
+    unit: str       # "lb", "g", etc.
+    is_stable: bool
+
+
+class DymoHIDScale:
+    """
+    Dymo scale backend for the PineTab2.
+
+    - Opens the USB HID device (VID 0x0922, PID 0x8009).
+    - Starts a background thread that blocks on dev.read(6) and
+      updates the 'latest' reading.
+    - get_latest() returns the most recent reading (or None).
+    - read_stable_weight() polls get_latest() until it sees a stable reading
+      (or times out), perfect for LOG button use.
+    """
+
+    def __init__(self, vendor_id: int = VENDOR_ID, product_id: int = PRODUCT_ID):
+        print("Enumerating HID devices...")
+        for info in hid.enumerate():
+            print(
+                f"  VID={info['vendor_id']:04x} "
+                f"PID={info['product_id']:04x} "
+                f"path={info['path']}"
+            )
+
+        self.dev = hid.device()
+        self.dev.open(vendor_id, product_id)
+
+        # Use BLOCKING reads in the reader thread so we never miss packets
+        self.dev.set_nonblocking(False)
+        print(f"Opened Dymo scale VID=0x{vendor_id:04x} PID=0x{product_id:04x}")
+
+        self._latest: Optional[ScaleReading] = None
+        self._lock = threading.Lock()
+        self._stop = False
+
+        t = threading.Thread(target=self._reader_loop, daemon=True)
+        t.start()
+
+    # ---------- internal reader ----------
+
+    def _reader_loop(self):
+        while not self._stop:
+            try:
+                data = self.dev.read(6)  # blocking
+            except OSError:
+                time.sleep(0.1)
+                continue
+
+            if not data:
+                continue
+
+            rep = bytes(data)
+            reading = self._parse_report(rep)
+            if reading:
+                # Uncomment this for low-level debug:
+                # print(f"RAW: {rep!r} -> {reading.value:.2f} {reading.unit}")
+                with self._lock:
+                    self._latest = reading
+
+    def _parse_report(self, rep: bytes) -> Optional[ScaleReading]:
+        """
+        Dymo HID packet from your S250:
+
+          [0] report_id  (0x03)
+          [1] status     (bit 0x04 = stable)
+          [2] unit_code  (0x02 = g, 0x0B = oz, 0x0C = lb)
+          [3] exponent   (signed 8-bit, power of 10)
+          [4] low byte   (LSB)
+          [5] high byte  (MSB)
+        """
+        if len(rep) < 6:
+            return None
+
+        status    = rep[1]
+        unit_code = rep[2]
+        exponent  = rep[3]
+        low       = rep[4]
+        high      = rep[5]
+
+        is_stable = bool(status & 0x04)
+
+        raw = (high << 8) | low
+
+        # signed 8-bit exponent (two's complement)
+        exp = exponent - 256 if exponent >= 128 else exponent
+        scale = 10 ** exp  # exp = -1 -> 0.1
+
+        if unit_code == 0x02:      # grams
+            value = raw * scale
+            unit = "g"
+        elif unit_code == 0x0B:    # ounces
+            value = raw * scale
+            unit = "oz"
+        elif unit_code == 0x0C:    # pounds (your S250 foot-test)
+            value = raw * scale    # 0.1 lb units -> lb
+            unit = "lb"
+        else:
+            value = raw * scale
+            unit = f"0x{unit_code:02x}"
+
+        return ScaleReading(float(value), unit, is_stable)
+
+    # ---------- public API ----------
+
+    def get_latest(self) -> Optional[ScaleReading]:
+        """Return the most recent reading from the background thread."""
+        with self._lock:
+            return self._latest
+
+    def read_stable_weight(self, timeout_s: float = 2.0) -> Optional[ScaleReading]:
+        """
+        Poll get_latest() for up to timeout_s and return the last
+        stable reading. This is meant for "LOG" button usage.
+        """
+        deadline = time.time() + timeout_s
+        last = None
+        while time.time() < deadline:
+            r = self.get_latest()
+            if r:
+                last = r
+                if r.is_stable:
+                    return r
+            time.sleep(0.05)
+        return last
+
+    def close(self):
+        self._stop = True
+        try:
+            self.dev.close()
+        except Exception:
+            pass
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/ttf_test.py
+================================================================================
+import tkinter as tk
+from tkinter import font as tkfont
+
+root = tk.Tk()
+
+try:
+    f = tkfont.Font(family="DejaVu Sans", size=40)
+    tk.Label(root, text="DejaVu Sans 40", font=f).pack()
+    print("Loaded TrueType font successfully.")
+except Exception as e:
+    print("Failed:", e)
+
+root.mainloop()
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/src/weigh/ui_components.py
+================================================================================
+# ui_components.py
+import streamlit as st
+
+def big_weight_display(value, unit, is_stable):
+    color = "green" if is_stable else "orange"
+    st.markdown(
+        f"""
+        <div class="weight-display" style="color:{color}">
+            {value:.2f} {unit}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def pending_indicator(reading):
+    if reading and not reading.is_stable:
+        st.markdown(
+            "<div class='pending'>Pending stable weight...</div>",
+            unsafe_allow_html=True,
+        )
+
+def type_buttons_row(types, source, reading):
+    cols = st.columns(len(types))
+
+    for col, t in zip(cols, types):
+        with col:
+            if st.button(t["name"], use_container_width=True):
+                if reading and reading.is_stable:
+                    st.success(f"Logged {reading.value:.2f} lb as {t['name']} from {source}")
+                    import logger_core
+                    logger_core.log_entry(reading.value, source, t["name"])
+                else:
+                    st.warning("Waiting for stable weight… try again.")
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/conftest.py
+================================================================================
+import pytest
+import tempfile
+import os
+import shutil
+
+from weigh import db as weigh_db
+
+@pytest.fixture
+def temp_db(monkeypatch):
+    tmpdir = tempfile.mkdtemp()
+    db_path = os.path.join(tmpdir, "weigh.db")
+    schema_path = os.path.join(os.path.dirname(__file__), "..", "src", "weigh", "schema.sql")
+
+    # reset paths and connection
+    weigh_db.init_for_test(db_path, schema_path)
+
+    return {"db_path": db_path, "tmpdir": tmpdir}
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_cli.py
+================================================================================
+import os
+import pytest
+from click.testing import CliRunner
+from weigh.cli_weigh import cli
+
+def test_cli_log_and_totals(temp_db):
+    runner = CliRunner()
+
+    # log a donation
+    r = runner.invoke(cli, ["log", "Safeway", "Produce", "8.2"], standalone_mode=False)
+    assert r.exit_code == 0
+    assert "Logged 8.20 lb from 'Safeway' as 'Produce'" in r.output
+
+    # verify totals
+    r = runner.invoke(cli, ["totals"], standalone_mode=False)
+    assert r.exit_code == 0
+    assert "8.20" in r.output
+
+
+def test_cli_source_add_and_list(temp_db):
+    runner = CliRunner()
+
+    r = runner.invoke(cli, ["source", "add", "Trader Joe's"], standalone_mode=False)
+    assert r.exit_code == 0
+
+    r = runner.invoke(cli, ["source", "list"], standalone_mode=False)
+    assert "Trader Joe's" in r.output
+
+
+def test_cli_tail(temp_db):
+    runner = CliRunner()
+
+    runner.invoke(cli, ["log", "Safeway", "Produce", "3.0"], standalone_mode=False)
+    runner.invoke(cli, ["log", "Safeway", "Dry", "4.0"], standalone_mode=False)
+
+    r = runner.invoke(cli, ["tail", "-n", "2"], standalone_mode=False)
+    assert r.exit_code == 0
+    assert "3.0" in r.output
+    assert "4.0" in r.output
+
+
+def test_cli_undo(temp_db):
+    runner = CliRunner()
+
+    runner.invoke(cli, ["log", "Safeway", "Produce", "5.0"], standalone_mode=False)
+    r = runner.invoke(cli, ["undo"], standalone_mode=False)
+
+    assert "Removed entry" in r.output
+
+    r = runner.invoke(cli, ["totals"], standalone_mode=False)
+    assert "0.00" in r.output  # nothing left
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_dao.py
+================================================================================
+from weigh import dao
+
+def test_dao_add_and_get_sources(temp_db):
+    dao.add_source("Whole Foods")
+    dao.add_source("Safeway")
+
+    sources = dao.get_sources()
+    names = [s["name"] for s in sources]
+    assert "Whole Foods" in names
+    assert "Safeway" in names
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_db_init.py
+================================================================================
+# test_db_init.py
+import sqlite3
+from weigh import db
+
+
+def test_init_creates_tables(temp_db):
+    conn = sqlite3.connect(temp_db["db_path"])
+
+    # list expected tables
+    tables = {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+
+    assert "sources" in tables
+    assert "types" in tables
+    assert "logs" in tables
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_end_to_end.py
+================================================================================
+from click.testing import CliRunner
+from weigh.cli_weigh import cli
+
+def test_end_to_end(temp_db):
+    runner = CliRunner()
+
+    runner.invoke(cli, ["source", "add", "Wegmans"], standalone_mode=False)
+    runner.invoke(cli, ["log", "Wegmans", "Dairy", "7.5"], standalone_mode=False)
+
+    r = runner.invoke(cli, ["totals"], standalone_mode=False)
+    assert "7.50" in r.output
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_logging.py
+================================================================================
+# test_logging.py
+from weigh import logger_core
+
+
+def test_log_entry_and_query(temp_db):
+    logger_core.log_entry(10.5, "Trader Joe's", "Produce")
+    logger_core.log_entry(5.0, "Safeway", "Dry")
+
+    logs = logger_core.get_last_logs(10)
+    assert len(logs) == 2
+
+    assert logs[0]["weight_lb"] in (10.5, 5.0)
+    assert logs[1]["weight_lb"] in (10.5, 5.0)
+
+
+def test_undo_last(temp_db):
+    logger_core.log_entry(7.7, "Wegmans", "Meat")
+
+    removed = logger_core.undo_last_entry()
+    assert removed is not None
+
+    logs = logger_core.get_last_logs(10)
+    assert logs[0]["deleted"] == 1
+
+
+def test_totals_today(temp_db):
+    logger_core.log_entry(3.0, "Whole Foods", "Bread")
+    logger_core.log_entry(2.0, "Whole Foods", "Bread")
+
+    total = logger_core.totals_today_weight()
+    assert abs(total - 5.0) < 1e-6
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_schema_integrity.py
+================================================================================
+import sqlite3
+from weigh.db import init_db
+
+def test_schema_creates_tables(temp_db):
+    init_db()
+    conn = sqlite3.connect(temp_db["db_path"])
+    cur = conn.cursor()
+
+    tables = [r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+    assert "sources" in tables
+    assert "types" in tables
+    assert "logs" in tables
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/tests/test_sources_types.py
+================================================================================
+# test_sources_types.py
+from weigh import logger_core
+
+
+def test_sources_loaded(temp_db):
+    sources = logger_core.get_sources_dict()
+    assert "Trader Joe's" in sources
+    assert "Wegmans" in sources
+    assert len(sources) >= 7
+
+
+def test_types_loaded(temp_db):
+    types = logger_core.get_types_dict()
+    assert "Produce" in types
+    assert "Dry" in types
+    assert len(types) >= 7
+

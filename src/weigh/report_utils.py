@@ -14,10 +14,22 @@ def generate_report_csv(start_date, end_date):
     # 1. Fetch Data
     logs = logger_core.get_logs_between(start_date, end_date)
     
-    # 2. Calculate Summaries: totals[source][type] = weight
-    totals = defaultdict(lambda: defaultdict(float))
+    # 2. Calculate Summaries: totals[source][type] = {weight, temps}
+    totals = defaultdict(lambda: defaultdict(lambda: {
+        'weight': 0.0,
+        'all_temps': []
+    }))
+    
     for row in logs:
-        totals[row["source"]][row["type"]] += row["weight_lb"]
+        src = row["source"]
+        typ = row["type"]
+        totals[src][typ]['weight'] += row["weight_lb"]
+        
+        # Collect all temperature data (pickup and dropoff combined)
+        if row.get('temp_pickup_f') is not None:
+            totals[src][typ]['all_temps'].append(row['temp_pickup_f'])
+        if row.get('temp_dropoff_f') is not None:
+            totals[src][typ]['all_temps'].append(row['temp_dropoff_f'])
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -26,23 +38,58 @@ def generate_report_csv(start_date, end_date):
     writer.writerow(["SUMMARY REPORT", f"{start_date} to {end_date}"])
     writer.writerow([]) # Blank line
     
-    writer.writerow(["Source", "Type", "Total Weight (lb)"])
-    
     # Sort alphabetically by Source, then Type
     for src in sorted(totals.keys()):
-        for typ in sorted(totals[src].keys()):
-            weight = totals[src][typ]
-            writer.writerow([src, typ, f"{weight:.2f}"])
+        # Separate temp-controlled and non-temp items
+        temp_items = {}
+        non_temp_items = {}
+        
+        for typ, data in totals[src].items():
+            if data['all_temps']:  # Has temperature data
+                temp_items[typ] = data
+            else:
+                non_temp_items[typ] = data
+        
+        # Write source name only once at the top
+        writer.writerow([src])
+        # Single header row for all items
+        writer.writerow(["Type", "Total Weight (lb)", "Min Temp (°F)", "Max Temp (°F)"])
+        
+        # Non-temperature items (with empty temp columns)
+        for typ in sorted(non_temp_items.keys()):
+            weight = non_temp_items[typ]['weight']
+            writer.writerow([typ, f"{weight:.2f}", "", ""])
+        
+        # Temperature-controlled items (with temp data)
+        for typ in sorted(temp_items.keys()):
+            data = temp_items[typ]
+            weight = data['weight']
+            min_temp = f"{min(data['all_temps']):.1f}"
+            max_temp = f"{max(data['all_temps']):.1f}"
+            writer.writerow([typ, f"{weight:.2f}", min_temp, max_temp])
+        
+        # Blank line between sources
+        writer.writerow([])
             
-    writer.writerow([]) # Blank lines to separate sections
-    writer.writerow([])
+    writer.writerow([]) # Extra blank line before detailed section
     
     # 4. Write Detailed Section
     writer.writerow(["DETAILED LOGS"])
-    writer.writerow(["Timestamp", "Source", "Type", "Weight (lb)"])
+    writer.writerow(["Timestamp", "Source", "Type", "Weight (lb)", "Pickup Temp (°F)", "Dropoff Temp (°F)"])
 
     for row in logs:
-        writer.writerow([row["timestamp"], row["source"], row["type"], row["weight_lb"]])
+        # Format temperature values
+        temp_pickup = f"{row['temp_pickup_f']:.1f}" if row.get('temp_pickup_f') is not None else ""
+        temp_dropoff = f"{row['temp_dropoff_f']:.1f}" if row.get('temp_dropoff_f') is not None else ""
+        
+        writer.writerow([
+            row["timestamp"], 
+            row["source"], 
+            row["type"], 
+            row["weight_lb"],
+            temp_pickup,
+            temp_dropoff
+        ])
 
     return buf.getvalue().encode("utf-8")
 
