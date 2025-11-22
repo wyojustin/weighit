@@ -1,0 +1,9 @@
+# Core Dependencies
+streamlit>=1.31.0
+pillow>=10.0.0
+hidapi>=0.14.0
+click>=8.1.0
+
+# Optional but recommended
+pytest>=7.4.0
+pytest-cov>=4.1.0

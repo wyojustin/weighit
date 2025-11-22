@@ -1,0 +1,37 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.1, pluggy-1.6.0 -- /home/alarm/miniconda3/envs/foodlog/bin/python3.12
+cachedir: .pytest_cache
+rootdir: /home/alarm/weigh
+configfile: pyproject.toml
+collecting ... collected 13 items
+
+tests/test_cli.py::test_cli_log_and_totals PASSED                        [  7%]
+tests/test_cli.py::test_cli_source_add_and_list PASSED                   [ 15%]
+tests/test_cli.py::test_cli_tail PASSED                                  [ 23%]
+tests/test_cli.py::test_cli_undo PASSED                                  [ 30%]
+tests/test_dao.py::test_dao_add_and_get_sources PASSED                   [ 38%]
+tests/test_db_init.py::test_init_creates_tables PASSED                   [ 46%]
+tests/test_end_to_end.py::test_end_to_end PASSED                         [ 53%]
+tests/test_logging.py::test_log_entry_and_query PASSED                   [ 61%]
+tests/test_logging.py::test_undo_last PASSED                             [ 69%]
+tests/test_logging.py::test_totals_today PASSED                          [ 76%]
+tests/test_schema_integrity.py::test_schema_creates_tables PASSED        [ 84%]
+tests/test_sources_types.py::test_sources_loaded PASSED                  [ 92%]
+tests/test_sources_types.py::test_types_loaded PASSED                    [100%]
+
+=============================== warnings summary ===============================
+tests/test_cli.py: 4 warnings
+tests/test_end_to_end.py: 1 warning
+tests/test_logging.py: 5 warnings
+  /home/alarm/weigh/src/weigh/logger_core.py:16: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    ts = datetime.utcnow().isoformat()
+
+tests/test_cli.py::test_cli_log_and_totals
+tests/test_cli.py::test_cli_undo
+tests/test_end_to_end.py::test_end_to_end
+tests/test_logging.py::test_totals_today
+  /home/alarm/weigh/src/weigh/logger_core.py:44: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    today = datetime.utcnow().date().isoformat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 13 passed, 14 warnings in 0.46s ========================
