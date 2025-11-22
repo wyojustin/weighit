@@ -1,15 +1,55 @@
-/* Make buttons shorter and thinner */
-.stButton > button {
-    padding-top: 8px !important;
-    padding-bottom: 8px !important;
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    font-size: 22px !important;
-    border-radius: 8px;
+/* assets/style.css */
+
+/* --- GLOBAL LAYOUT --- */
+.block-container {
+    padding-top: 3rem !important; /* Space for hidden toolbar */
+    padding-bottom: 1rem !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: 100% !important;
 }
 
-/* Keep buttons from filling the entire row */
-.compact-button {
-    display: inline-block;
-    margin: 4px;
+/* Reduce vertical gap between elements */
+div[data-testid="stVerticalBlock"] {
+    gap: 0.2rem !important;
+}
+
+/* --- BUTTONS --- */
+.stButton > button {
+    padding: 0px !important;
+    height: 80px !important; /* Slightly reduced to fit 2 rows better */
+    font-size: 24px !important;
+    border-radius: 12px;
+    font-weight: 600;
+    width: 100%;
+    /* Remove margins so Streamlit controls spacing via 'gap' */
+    margin: 0px !important; 
+}
+
+/* --- WEIGHT DISPLAY --- */
+.weight-box {
+    font-size: 160px; 
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.0;
+    margin-bottom: 10px; /* Slight separation from buttons */
+    font-family: "Source Sans Pro", sans-serif;
+    color: inherit; 
+}
+
+/* --- TOTALS TEXT --- */
+.totals-box {
+    text-align: center;
+    font-size: 20px;
+    color: #808080;
+    margin-top: 15px;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+/* --- LOGOS --- */
+div[data-testid="stImage"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }

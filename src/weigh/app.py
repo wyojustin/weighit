@@ -1,304 +1,206 @@
 # app.py
-"""
-Streamlit GUI for weigh.
-
-Run from this directory:
-    streamlit run app.py
-
-Design goals (MVP):
-- Full-screen, touch-friendly.
-- Top row: pantry logo | HUGE live weight | scale logo.
-- Middle: compact donation type buttons (1 row if <=6, else 2 rows).
-- Sidebar: source selector + report generation.
-- Bottom: today's totals in ONE LINE, smaller font.
-- Status area stays at bottom and does NOT shove buttons around.
-- No "stable pending" UI; scale seems stable enough in practice.
-"""
-
 from __future__ import annotations
 
-import os
 import time
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import List, Optional
 
 import streamlit as st
 from PIL import Image
 
-# ---- local imports (non-relative to avoid Streamlit "no known parent" issues) ----
+# ---- local imports ----
 try:
     import logger_core
     import report_utils
     import db_backend
     import scale_backend
 except Exception:
-    # fallback if run from repo root with package on path
-    from weigh import logger_core, report_utils, db_backend, scale_backend  # type: ignore
+    from weigh import logger_core, report_utils, db_backend, scale_backend
 
 ASSETS_DIR = Path(__file__).parent / "assets"
-STYLE_PATH = ASSETS_DIR / "style.css"
-
+STYLE_CSS = ASSETS_DIR / "style.css"
 PANTRY_LOGO = ASSETS_DIR / "slfp_logo.png"
 SCALE_LOGO = ASSETS_DIR / "scale_icon.png"
 
 # ---------------- Streamlit page config ----------------
 st.set_page_config(
-    page_title="Weigh Food Logger",
+    page_title="Weigh Kiosk",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
-# ---------------- CSS ----------------
-DEFAULT_CSS = """
-/* Overall app */
-html, body, [class*="css"] {
-  font-size: 18px;
-}
-
-/* hide Streamlit chrome */
-header, footer { visibility: hidden; height: 0px; }
-
-/* reduce padding top */
-.block-container {
-  padding-top: 0.4rem;
-  padding-bottom: 0.2rem;
-  padding-left: 0.6rem;
-  padding-right: 0.6rem;
-}
-
-/* Make buttons compact + touch friendly */
-div.stButton > button {
-  height: 64px !important;          /* shorter than before */
-  padding: 0px 8px !important;      /* thinner L/R */
-  margin: 0px !important;
-  font-size: 22px !important;
-  font-weight: 700 !important;
-  border-radius: 10px !important;
-}
-
-/* tighten column gaps (Streamlit still adds some) */
-[data-testid="column"] {
-  padding-left: 2px !important;
-  padding-right: 2px !important;
-}
-
-/* Huge weight value */
-.weight-box {
-  text-align: center;
-  font-size: 96px;   /* BIG */
-  font-weight: 800;
-  line-height: 1.0;
-  margin-top: 8px;
-}
-
-/* Smaller totals line */
-.totals-line {
-  font-size: 18px;
-  font-weight: 600;
-  opacity: 0.9;
-  padding-top: 4px;
-}
-
-/* Status area at bottom */
-.status-area {
-  font-size: 20px;
-  font-weight: 700;
-  color: #0b7d2a; /* green-ish */
-  padding-top: 6px;
-}
-"""
-
-if STYLE_PATH.exists():
-    st.markdown(f"<style>{STYLE_PATH.read_text()}</style>", unsafe_allow_html=True)
-else:
-    st.markdown(f"<style>{DEFAULT_CSS}</style>", unsafe_allow_html=True)
-
 # ---------------- helpers ----------------
+
+def load_css(css_path: Path):
+    if css_path.exists():
+        with open(css_path) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 @st.cache_resource
 def get_scale() -> "scale_backend.DymoHIDScale":
-    """One scale reader per Streamlit server."""
     return scale_backend.DymoHIDScale()
 
-@st.cache_data(ttl=2.0)
+@st.cache_data(ttl=60.0)
 def get_sources() -> List[str]:
     return sorted(logger_core.get_sources_dict().keys())
 
-@st.cache_data(ttl=2.0)
+@st.cache_data(ttl=60.0)
 def get_types() -> List[str]:
-    # logger_core provides dict name->id; DB supplies sort_order but not exposed here.
-    types = list(logger_core.get_types_dict().keys())
-    return types
+    return list(logger_core.get_types_dict().keys())
 
-@st.cache_data(ttl=2.0)
 def get_daily_totals_line() -> str:
-    """
-    Return single-line totals like:
-      Bread: 4.0 lb | Dairy: 2.2 lb | Produce: 9.5 lb
-    """
-    totals = db_backend.get_daily_totals()  # should return dict {type: weight}
+    totals = db_backend.get_daily_totals()
     if not totals:
-        return "Today's totals: (none yet)"
-    parts = [f"{k}: {v:.2f} lb" for k, v in totals.items()]
-    return "Today's totals: " + " | ".join(parts)
+        return "Today: 0.0 lbs"
+    # Format: "Bread: 4.2 | Dairy: 10.5"
+    parts = [f"{k}: {v:.1f}" for k, v in totals.items()]
+    return " | ".join(parts)
 
-def load_logo(path: Path, height_px: int = 140) -> Optional[Image.Image]:
+def load_logo(path: Path, height_px: int = 100) -> Optional[Image.Image]:
     if not path.exists():
         return None
     img = Image.open(path).convert("RGBA")
     w, h = img.size
     scale = height_px / float(h)
-    new_w = int(w * scale)
-    return img.resize((new_w, height_px), Image.LANCZOS)
+    return img.resize((int(w * scale), height_px), Image.LANCZOS)
 
 def chunk_types(types: List[str]) -> List[List[str]]:
-    """1 row if <=6, else 2 rows split roughly in half."""
-    if len(types) <= 6:
+    """Split types into exactly 1 or 2 rows."""
+    if len(types) == 0:
+        return []
+    if len(types) <= 5:
         return [types]
+    # Ceiling division to balance rows
     mid = (len(types) + 1) // 2
     return [types[:mid], types[mid:]]
 
 def safe_rerun():
-    """Compatibility across Streamlit versions."""
     if hasattr(st, "rerun"):
         st.rerun()
-    # else: no-op on very old versions
 
-# ---------------- sidebar ----------------
+# ---------------- INIT ----------------
+load_css(STYLE_CSS)
 
+# Sidebar
 with st.sidebar:
-    st.header("Source & Reports")
-
+    st.header("Admin")
     sources = get_sources()
+    
+    # Default selection logic
     if "source" not in st.session_state:
         st.session_state.source = sources[0] if sources else "Unknown"
+    
+    # Ensure selected source is valid
+    current_idx = 0
+    if st.session_state.source in sources:
+        current_idx = sources.index(st.session_state.source)
+        
+    st.session_state.source = st.selectbox("Source", sources, index=current_idx)
+    
+    st.divider()
+    
+    # Undo Button in Sidebar
+    if st.button("Undo Last Entry"):
+        logger_core.undo_last_entry()
+        st.session_state.status_msg = "↩️ Undid last entry"
+        safe_rerun()
 
-    st.session_state.source = st.selectbox(
-        "Select source",
-        sources,
-        index=sources.index(st.session_state.source) if st.session_state.source in sources else 0,
+    st.divider()
+    
+    # --- REPORT EXPORT ---
+    st.subheader("Export Report")
+    
+    # Defaults to today
+    today = datetime.now(timezone.utc).date()
+    
+    d_start = st.date_input("Start Date", value=today)
+    d_end = st.date_input("End Date", value=today)
+
+    # Generate the CSV bytes immediately based on the date pickers
+    csv_bytes = report_utils.generate_report_csv(d_start.isoformat(), d_end.isoformat())
+    file_name = f"weigh_report_{d_start}_{d_end}.csv"
+
+    # Direct download button (no nested if st.button check)
+    st.download_button(
+        label="Download CSV",
+        data=csv_bytes,
+        file_name=file_name,
+        mime="text/csv",
+        use_container_width=True
     )
 
-    st.divider()
-
-    st.subheader("Generate report CSV")
-    today_str = datetime.utcnow().date().isoformat()
-    start_date = st.date_input("Start date", value=date.fromisoformat(today_str))
-    end_date = st.date_input("End date", value=date.fromisoformat(today_str))
-
-    if st.button("Generate CSV", width="stretch"):
-        csv_bytes = report_utils.generate_report_csv(
-            start_date.isoformat(),
-            end_date.isoformat()
-        )
-        st.download_button(
-            "Download report.csv",
-            data=csv_bytes,
-            file_name="report.csv",
-            mime="text/csv",
-            width="stretch",
-        )
-
-    st.divider()
-    st.caption("Sidebar can be collapsed when logging.")
-
-# ---------------- session state ----------------
+# Session State Defaults
 if "status_msg" not in st.session_state:
     st.session_state.status_msg = ""
-if "last_logged" not in st.session_state:
-    st.session_state.last_logged = None
-if "auto_refresh" not in st.session_state:
-    st.session_state.auto_refresh = True
 if "last_refresh_t" not in st.session_state:
     st.session_state.last_refresh_t = 0.0
 
-# ---------------- build UI ----------------
+# ---------------- MAIN UI ----------------
 
-scale = get_scale()
-reading = scale.get_latest()
-weight_lb = 0.0
-if reading and reading.unit == "lb":
-    weight_lb = reading.value
+# 1. Get Weight
+try:
+    scale = get_scale()
+    reading = scale.get_latest()
+    weight_str = f"{reading.value:.1f}" if reading and reading.unit == "lb" else "—"
+except Exception:
+    scale = None
+    weight_str = "Err"
 
-# ---- top row: logos + huge weight ----
-colL, colC, colR = st.columns([1.2, 5.0, 1.2], gap="small")
+# 2. Top Row: Logo | Weight | Logo
+# [1, 5, 1] ratio keeps the text centered and large
+c1, c2, c3 = st.columns([1, 5, 1], gap="small", vertical_alignment="center")
 
-with colL:
-    logo = load_logo(PANTRY_LOGO, height_px=140)
-    if logo is not None:
-        st.image(logo)
-    else:
-        st.write("Pantry")
+with c1:
+    img = load_logo(PANTRY_LOGO, height_px=110)
+    if img: st.image(img)
 
-with colC:
-    st.markdown(
-        f"<div class='weight-box'>{weight_lb:0.2f} lb</div>",
-        unsafe_allow_html=True,
-    )
+with c2:
+    st.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
 
-with colR:
-    logo = load_logo(SCALE_LOGO, height_px=140)
-    if logo is not None:
-        st.image(logo)
-    else:
-        st.write("Scale")
+with c3:
+    img = load_logo(SCALE_LOGO, height_px=110)
+    if img: st.image(img)
 
-st.markdown("<hr style='margin:6px 0px 6px 0px;'>", unsafe_allow_html=True)
-
-# ---- type buttons (compact; 1 or 2 rows) ----
+# 3. Buttons
 types = get_types()
-
 rows = chunk_types(types)
 
-def on_log(type_name: str):
-    # read stable-ish weight quickly, but no UI stable check
-    r = scale.read_stable_weight(timeout_s=0.5)
-    if r is None:
-        st.session_state.status_msg = "No scale reading."
-        return
-    w = r.value if r.unit == "lb" else None
-    if w is None:
-        st.session_state.status_msg = f"Scale unit {r.unit} not supported."
-        return
+def on_log(tname):
+    r = scale.read_stable_weight(timeout_s=0.5) if scale else None
+    if r and r.unit == "lb":
+        src = st.session_state.source
+        logger_core.log_entry(r.value, src, tname)
+        st.session_state.status_msg = f"Logged {r.value:.1f} lbs to {src} — {tname}"
+    else:
+        st.session_state.status_msg = "⚠️ Scale Error"
 
-    src = st.session_state.source
-    logger_core.log_entry(w, src, type_name)
+# Render Rows
+for i, row in enumerate(rows):
+    cols = st.columns(len(row), gap="small")
+    for idx, tname in enumerate(row):
+        cols[idx].button(tname, on_click=on_log, args=(tname,), use_container_width=True, key=f"btn_{i}_{idx}")
 
-    st.session_state.last_logged = (src, type_name, w)
-    st.session_state.status_msg = f"Logged {w:.2f} lb to {src} / {type_name}"
+# 4. Daily Totals
+st.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', unsafe_allow_html=True)
 
-for row_types in rows:
-    # Add small left/right spacers so row doesn't stretch edge-to-edge
-    cols = st.columns([0.4] + [1.0]*len(row_types) + [0.4], gap="small")
-    for i, tname in enumerate(row_types, start=1):
-        with cols[i]:
-            st.button(
-                tname,
-                width="stretch",
-                on_click=on_log,
-                args=(tname,),
-                key=f"log_{tname}",
-            )
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-
-# ---- bottom area: totals line + status line ----
-totals_line = get_daily_totals_line()
-st.markdown(f"<div class='totals-line'>{totals_line}</div>", unsafe_allow_html=True)
-
-if st.session_state.status_msg:
-    st.markdown(
-        f"<div class='status-area'>{st.session_state.status_msg}</div>",
-        unsafe_allow_html=True,
-    )
+# 5. Status Bar (Last element)
+msg = st.session_state.status_msg
+if msg:
+    if "Logged" in msg:
+        st.success(msg, icon="✅")
+    elif "Undid" in msg:
+        st.warning(msg, icon="↩️")
+    else:
+        st.error(msg, icon="⚠️")
 else:
-    st.markdown("<div class='status-area'>&nbsp;</div>", unsafe_allow_html=True)
+    # Invisible placeholder to prevent layout jump
+    st.markdown("<div style='height: 52px;'></div>", unsafe_allow_html=True)
 
-# ---------------- auto-refresh loop ----------------
-# We want the weight display to update even without clicks.
-# This makes the script re-run itself ~5 Hz.
+# 6. Auto-Refresh Loop
 now = time.time()
-if st.session_state.auto_refresh and (now - st.session_state.last_refresh_t) > 0.2:
+if (now - st.session_state.last_refresh_t) > 0.2:
     st.session_state.last_refresh_t = now
     time.sleep(0.2)
     safe_rerun()
+    
