@@ -31,7 +31,7 @@ def set_defaults_if_needed():
     global DB_PATH, SCHEMA_PATH
 
     if DB_PATH is None:
-        DB_PATH = os.path.expanduser("~/weigh/weigh.db")
+        DB_PATH = os.path.expanduser("~/weighit/weigh.db")
 
     if SCHEMA_PATH is None:
         here = os.path.dirname(__file__)
@@ -56,11 +56,22 @@ def initialize_schema_if_needed():
             return
 
         set_defaults_if_needed()
+        
         conn = sqlite3.connect(DB_PATH)
         try:
-            with open(SCHEMA_PATH, "r") as f:
-                conn.executescript(f.read())
-            conn.commit()
+            # --- FIX START ---
+            # Check if a key table (e.g., 'logs') already exists.
+            # If it does, assume the DB is initialized and DO NOT run schema.sql.
+            cur = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='logs'"
+            )
+            if cur.fetchone() is None:
+                # Table missing? Run the schema to create everything.
+                if os.path.exists(SCHEMA_PATH):
+                    with open(SCHEMA_PATH, "r") as f:
+                        conn.executescript(f.read())
+                    conn.commit()
+            # --- FIX END ---
         finally:
             conn.close()
 
@@ -68,7 +79,7 @@ def initialize_schema_if_needed():
 
 
 def init_db():
-    """Force regenerate schema (only used manually)."""
+    """Force regenerate schema (only used manually or by tests)."""
     set_defaults_if_needed()
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -87,7 +98,11 @@ def init_for_test(db_path, schema_path):
     global DB_PATH, SCHEMA_PATH, _schema_initialized
     DB_PATH = db_path
     SCHEMA_PATH = schema_path
+    
+    # Reset flag so next connection knows to respect new paths
     _schema_initialized = False
+    
+    # Force creation immediately
     init_db()
 
 
@@ -134,19 +149,3 @@ def fetch_types():
         ).fetchall()
     finally:
         conn.close()
-
-# --- pytest helper ----------------------------------------------------------
-
-def init_for_test(db_path, schema_path):
-    """
-    Used ONLY by pytest.
-    Sets a temp DB and schema, forces a clean connection, and recreates tables.
-    """
-    global DB_PATH, SCHEMA_PATH
-
-    DB_PATH = db_path
-    SCHEMA_PATH = schema_path
-
-    reset_connection()  # ensure we don't reuse old DB
-    init_db()           # create tables fresh in test DB
-
