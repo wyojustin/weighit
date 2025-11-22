@@ -24,11 +24,22 @@ A comprehensive food donation tracking system designed for food pantries, featur
 ### Main Interface
 Large weight display, food type buttons, and real-time history tracking.
 
+![Main Interface](docs/images/main-interface.png)
+
 ### Temperature Dialog
 Automatic popup for temperature-controlled items with pickup and dropoff temperature fields.
 
+![Temperature Dialog](docs/images/temperature-dialog.png)
+
 ### CSV Report
 Comprehensive summary with weight totals and temperature ranges per source.
+
+![CSV Report Example](docs/images/csv-report.png)
+
+### History Table
+Recent entries showing inline temperature information.
+
+![History Table](docs/images/history-table.png)
 
 ## 🛠️ Hardware Requirements
 
