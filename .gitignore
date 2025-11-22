@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+*.sqlite3
+
+# Environments
+.venv/
+env/
+venv/
+*.swp
+
+# Build artifacts
+build/
+dist/
+
+# Local DB
+weigh.db
+
+# Logs / outputs
+output.txt
+pytest_results.txt
+src/weigh/junk.txt
+src/weigh/test_results.txt
+
+# IDE
+.vscode/
+.idea/
+
+# Streamlit / GUI cache
+.streamlit/
+
+# OS files
+.DS_Store
+Thumbs.db

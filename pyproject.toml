@@ -1,0 +1,17 @@
+[project]
+name = "weigh"
+version = "0.1.0"
+description = "Food pantry weighing CLI and backend"
+requires-python = ">=3.10"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+weigh = ["assets/*.png", "schema.sql"]
+
+[project.scripts]
+weigh = "weigh.cli_weigh:main"

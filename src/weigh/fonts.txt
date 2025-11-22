@@ -1,0 +1,53 @@
+Available font families:
+newcenturyschlbk
+nimbus roman no9 l
+clearlyu devangari extra
+clearlyu arabic
+dingbats
+standard symbols l
+clearlyu arabic extra
+urw chancery l
+fixed
+urw palladio l
+courier 10 pitch
+open look glyph
+bitstream charter
+avantgarde
+clearlyu pua
+urw gothic l
+century schoolbook l
+urw bookman l
+clean
+avant garde gothic
+zapf chancery
+gothic
+bookman
+new century schoolbook
+clearlyu alternate glyphs
+song ti
+latin modern typewriter
+zapf dingbats
+open look cursor
+helvetica
+mincho
+nimbus sans l
+palatino
+clearlyu
+courier
+latin modern sans
+latin modern typewriter variable width
+clearlyu devanagari
+nil
+itc avant garde gothic
+latin modern sansquotation
+itc zapf chancery
+itc bookman
+fangsong ti
+times
+latin modern roman
+newspaper
+itc zapf dingbats
+clearlyu ligature
+nimbus mono l
+zapfdingbats
+symbol
