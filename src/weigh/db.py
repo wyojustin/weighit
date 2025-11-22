@@ -1,4 +1,4 @@
-# db.py – Streamlit-safe SQLite access layer
+# db.py — Streamlit-safe SQLite access layer
 
 import sqlite3
 import os
@@ -14,7 +14,7 @@ SCHEMA_PATH = None
 # IMPORTANT:
 # We no longer keep a long-lived connection in memory.
 # Each call to get_conn() returns a NEW connection.
-# This avoids Streamlit's “SQLite objects created in a thread…”
+# This avoids Streamlit's "SQLite objects created in a thread…"
 # errors entirely.
 #
 # However, schema initialization must be thread-safe:
@@ -59,7 +59,6 @@ def initialize_schema_if_needed():
         
         conn = sqlite3.connect(DB_PATH)
         try:
-            # --- FIX START ---
             # Check if a key table (e.g., 'logs') already exists.
             # If it does, assume the DB is initialized and DO NOT run schema.sql.
             cur = conn.execute(
@@ -71,7 +70,6 @@ def initialize_schema_if_needed():
                     with open(SCHEMA_PATH, "r") as f:
                         conn.executescript(f.read())
                     conn.commit()
-            # --- FIX END ---
         finally:
             conn.close()
 
@@ -145,7 +143,7 @@ def fetch_types():
     conn = get_conn()
     try:
         return conn.execute(
-            "SELECT id, name, sort_order FROM types ORDER BY sort_order"
+            "SELECT id, name, sort_order, requires_temp FROM types ORDER BY sort_order"
         ).fetchall()
     finally:
         conn.close()

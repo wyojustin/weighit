@@ -24,8 +24,9 @@ def list_types():
 # DAILY TOTALS
 # ---------------------
 
-def get_daily_totals():
+def get_daily_totals(source=None):
     """
     Returns dict: {type_name: total_weight_lbs}
+    Optionally filtered by source.
     """
-    return logger_core.totals_today_weight_per_type()
+    return logger_core.totals_today_weight_per_type(source=source)
