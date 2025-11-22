@@ -1,0 +1,85 @@
+Starting Streamlit...
+Waiting for server to initialize...
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.86.205:8501
+  External URL: http://108.56.143.24:8501
+
+Server is up!
+[65255:65255:1122/212351.842708:ERROR:gl_surface_presentation_helper.cc(260)] GetVSyncParametersIfAvailable() failed for 1 times!
+[65255:65255:1122/212353.887707:ERROR:gl_surface_presentation_helper.cc(260)] GetVSyncParametersIfAvailable() failed for 2 times!
+[65255:65255:1122/212356.335166:ERROR:gl_surface_presentation_helper.cc(260)] GetVSyncParametersIfAvailable() failed for 3 times!
+2025-11-22 21:23:56.655 Uncaught app execution
+Traceback (most recent call last):
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/weighit/src/weigh/app.py", line 331, in <module>
+    types = get_types()
+            ^^^^^^^^^^^
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/caching/cache_utils.py", line 228, in __call__
+    return self._get_or_create_cached_value(args, kwargs, spinner_message)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/caching/cache_utils.py", line 270, in _get_or_create_cached_value
+    return self._handle_cache_miss(cache, value_key, func_args, func_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/caching/cache_utils.py", line 329, in _handle_cache_miss
+    computed_value = self._info.func(*func_args, **func_kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/weighit/src/weigh/app.py", line 53, in get_types
+    types_dict = logger_core.get_types_dict()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/weighit/src/weigh/logger_core.py", line 59, in get_types_dict
+    "requires_temp": bool(row.get("requires_temp", 0))
+                          ^^^^^^^
+AttributeError: 'sqlite3.Row' object has no attribute 'get'
+Warning: vkCreateInstance: Found no drivers!
+Warning: vkCreateInstance failed with VK_ERROR_INCOMPATIBLE_DRIVER
+    at CheckVkSuccessImpl (../../third_party/dawn/src/dawn/native/vulkan/VulkanError.cpp:106)
+
+[65531:65531:1122/212546.127488:ERROR:gpu_blocklist.cc(71)] Unable to get gpu adapter
+2025-11-22 21:27:09.704 MediaFileHandler: Missing file 38221989557cffe04ebd66140d6d3895a62b8c89b84960570a546658.csv
+Traceback (most recent call last):
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/memory_media_file_storage.py", line 140, in get_file
+    return self._files_by_id[file_id]
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyError: '38221989557cffe04ebd66140d6d3895a62b8c89b84960570a546658'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/web/server/media_file_handler.py", line 95, in validate_absolute_path
+    self._storage.get_file(absolute_path)
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/memory_media_file_storage.py", line 142, in get_file
+    raise MediaFileStorageError(
+streamlit.runtime.media_file_storage.MediaFileStorageError: Bad filename '38221989557cffe04ebd66140d6d3895a62b8c89b84960570a546658.csv'. (No media file with id '38221989557cffe04ebd66140d6d3895a62b8c89b84960570a546658')
+2025-11-22 21:34:48.377 Uncaught app execution
+Traceback (most recent call last):
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+             ^^^^^^
+  File "/home/alarm/miniconda3/envs/foodlog/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/weighit/src/weigh/app.py", line 287, in <module>
+    csv_bytes_dl = report_utils.generate_report_csv(d_start.isoformat(), d_end.isoformat())
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/weighit/src/weigh/report_utils.py", line 15, in generate_report_csv
+    logs = logger_core.get_logs_between(start_date, end_date)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alarm/weighit/src/weigh/logger_core.py", line 8, in get_logs_between
+    rows = conn.execute("""
+           ^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: l.temp_product_f
+Enumerating HID devices...
+  VID=1018 PID=1006 path=b'4-1:1.0'
+  VID=1018 PID=1006 path=b'4-1:1.1'
+  VID=0922 PID=8009 path=b'1-1:1.0'
+Opened Dymo scale VID=0x0922 PID=0x8009
+  Stopping...
+  Stopping...
