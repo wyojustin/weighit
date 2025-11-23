@@ -34,13 +34,10 @@ INSERT OR IGNORE INTO sources (name) VALUES ('Safeway');
 INSERT OR IGNORE INTO sources (name) VALUES ('Good Shepherd donations');
 INSERT OR IGNORE INTO sources (name) VALUES ('FreshFarm St John Neumann');
 
--- Default types (with temperature requirements)
-INSERT OR IGNORE INTO types (name, sort_order, requires_temp) VALUES 
-    ('Produce', 1, 0),
-    ('Bread', 2, 0),
-    ('Dry', 3, 0),
-    ('Dairy', 4, 1),      -- Requires temperature
-    ('Meat', 5, 1),       -- Requires temperature
-    ('Prepared', 6, 1),   -- Requires temperature
-    ('Frozen', 7, 0),
-    ('Other', 8, 0);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Produce', 0);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Dry', 1);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Dairy', 2);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Meat', 3);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Prepared', 4);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Bread', 5);
+INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Non-food', 6);
