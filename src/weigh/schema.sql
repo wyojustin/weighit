@@ -26,14 +26,13 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 
 -- Default sources
-INSERT OR IGNORE INTO sources (name) VALUES 
-    ('Trader Joe''s'),
-    ('Safeway'),
-    ('Wegmans'),
-    ('Whole Foods'),
-    ('Costco'),
-    ('Giant'),
-    ('Harris Teeter');
+INSERT OR IGNORE INTO sources (name) VALUES ('Food for Neighbors');
+INSERT OR IGNORE INTO sources (name) VALUES ('Trader Joe''s');
+INSERT OR IGNORE INTO sources (name) VALUES ('Whole Foods');
+INSERT OR IGNORE INTO sources (name) VALUES ('Wegmans');
+INSERT OR IGNORE INTO sources (name) VALUES ('Safeway');
+INSERT OR IGNORE INTO sources (name) VALUES ('Good Shepherd donations');
+INSERT OR IGNORE INTO sources (name) VALUES ('FreshFarm St John Neumann');
 
 -- Default types (with temperature requirements)
 INSERT OR IGNORE INTO types (name, sort_order, requires_temp) VALUES 

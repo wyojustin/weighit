@@ -54,6 +54,294 @@ if __name__ == "__main__":
 
 
 ================================================================================
+# FILE PATH: /home/alarm/weighit/migrate_db.py
+================================================================================
+#!/usr/bin/env python3
+"""
+migrate_db.py - Add temperature fields to existing database
+
+Run this script once to update your existing database with the new
+temperature tracking fields.
+
+Usage:
+    python migrate_db.py
+"""
+
+import sqlite3
+import os
+import sys
+
+def migrate_database():
+    """Add temperature columns to existing database"""
+    
+    # Use the default database path
+    db_path = os.path.expanduser("~/weighit/weigh.db")
+    
+    if not os.path.exists(db_path):
+        print(f"❌ Database not found at {db_path}")
+        print("Creating new database with updated schema...")
+        # If no DB exists, let the app create it with the new schema
+        return
+    
+    print(f"📊 Migrating database at {db_path}")
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check if columns already exist
+        cursor.execute("PRAGMA table_info(logs)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        needs_migration = False
+        
+        # Add temp_product_f column if it doesn't exist
+        if "temp_product_f" not in columns:
+            print("  ➕ Adding temp_product_f column...")
+            cursor.execute("ALTER TABLE logs ADD COLUMN temp_product_f REAL")
+            needs_migration = True
+        else:
+            print("  ✓ temp_product_f column already exists")
+        
+        # Add temp_cooler_f column if it doesn't exist
+        if "temp_cooler_f" not in columns:
+            print("  ➕ Adding temp_cooler_f column...")
+            cursor.execute("ALTER TABLE logs ADD COLUMN temp_cooler_f REAL")
+            needs_migration = True
+        else:
+            print("  ✓ temp_cooler_f column already exists")
+        
+        # Check if types table has requires_temp column
+        cursor.execute("PRAGMA table_info(types)")
+        type_columns = [row[1] for row in cursor.fetchall()]
+        
+        if "requires_temp" not in type_columns:
+            print("  ➕ Adding requires_temp column to types table...")
+            cursor.execute("ALTER TABLE types ADD COLUMN requires_temp INTEGER DEFAULT 0")
+            
+            # Update specific types to require temperature
+            print("  📝 Setting temperature requirements for Meat, Dairy, and Prepared...")
+            cursor.execute("""
+                UPDATE types 
+                SET requires_temp = 1 
+                WHERE name IN ('Meat', 'Dairy', 'Prepared')
+            """)
+            needs_migration = True
+        else:
+            print("  ✓ requires_temp column already exists")
+        
+        if needs_migration:
+            conn.commit()
+            print("✅ Migration completed successfully!")
+        else:
+            print("✅ Database already up to date!")
+        
+        conn.close()
+        
+    except sqlite3.Error as e:
+        print(f"❌ Migration failed: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("WeighIt Database Migration Script")
+    print("=" * 60)
+    print()
+    
+    migrate_database()
+    
+    print()
+    print("=" * 60)
+    print("Migration complete. You can now restart your application.")
+    print("=" * 60)
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/migrate_rename_temps.py
+================================================================================
+#!/usr/bin/env python3
+"""
+migrate_rename_temps.py - Rename temperature columns
+
+Renames:
+- temp_product_f -> temp_pickup_f
+- temp_cooler_f -> temp_dropoff_f
+
+Usage:
+    python migrate_rename_temps.py
+"""
+
+import sqlite3
+import os
+import sys
+
+def migrate_database():
+    """Rename temperature columns in existing database"""
+    
+    db_path = os.path.expanduser("~/weighit/weigh.db")
+    
+    if not os.path.exists(db_path):
+        print(f"❌ Database not found at {db_path}")
+        return
+    
+    print(f"📊 Migrating database at {db_path}")
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Check current columns
+        cursor.execute("PRAGMA table_info(logs)")
+        columns = {row[1]: row for row in cursor.fetchall()}
+        
+        print(f"  Current columns: {list(columns.keys())}")
+        
+        # Check if we need to rename
+        has_old_names = "temp_product_f" in columns or "temp_cooler_f" in columns
+        has_new_names = "temp_pickup_f" in columns and "temp_dropoff_f" in columns
+        
+        if has_new_names and not has_old_names:
+            print("  ✓ Columns already renamed!")
+            conn.close()
+            return
+        
+        if not has_old_names:
+            print("  ⚠️  Old column names not found. Adding new columns...")
+            cursor.execute("ALTER TABLE logs ADD COLUMN temp_pickup_f REAL")
+            cursor.execute("ALTER TABLE logs ADD COLUMN temp_dropoff_f REAL")
+            conn.commit()
+            print("  ✓ New columns added!")
+            conn.close()
+            return
+        
+        print("  🔄 Renaming columns...")
+        print("     This requires recreating the table...")
+        
+        # SQLite doesn't support renaming columns directly in older versions
+        # So we need to recreate the table
+        
+        # 1. Create new table with correct column names
+        cursor.execute("""
+            CREATE TABLE logs_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                weight_lb REAL NOT NULL,
+                source_id INTEGER NOT NULL,
+                type_id INTEGER NOT NULL,
+                deleted INTEGER DEFAULT 0,
+                temp_pickup_f REAL,
+                temp_dropoff_f REAL,
+                FOREIGN KEY (source_id) REFERENCES sources(id),
+                FOREIGN KEY (type_id) REFERENCES types(id)
+            )
+        """)
+        
+        # 2. Copy data from old table to new table
+        print("  📋 Copying data...")
+        cursor.execute("""
+            INSERT INTO logs_new 
+                (id, timestamp, weight_lb, source_id, type_id, deleted, 
+                 temp_pickup_f, temp_dropoff_f)
+            SELECT 
+                id, timestamp, weight_lb, source_id, type_id, deleted,
+                temp_product_f, temp_cooler_f
+            FROM logs
+        """)
+        
+        # 3. Drop old table
+        print("  🗑️  Removing old table...")
+        cursor.execute("DROP TABLE logs")
+        
+        # 4. Rename new table to logs
+        print("  ✏️  Renaming new table...")
+        cursor.execute("ALTER TABLE logs_new RENAME TO logs")
+        
+        conn.commit()
+        print("✅ Migration completed successfully!")
+        
+        # Verify
+        cursor.execute("PRAGMA table_info(logs)")
+        new_columns = [row[1] for row in cursor.fetchall()]
+        print(f"  New columns: {new_columns}")
+        
+        conn.close()
+        
+    except sqlite3.Error as e:
+        print(f"❌ Migration failed: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("WeighIt Temperature Column Rename Migration")
+    print("=" * 60)
+    print()
+    
+    migrate_database()
+    
+    print()
+    print("=" * 60)
+    print("Migration complete. You can now restart your application.")
+    print("=" * 60)
+
+
+================================================================================
+# FILE PATH: /home/alarm/weighit/setup.py
+================================================================================
+from setuptools import setup, find_packages
+from pathlib import Path
+
+# Read the README for long description
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
+
+setup(
+    name="weighit",
+    version="1.0.0",
+    author="wyojustin",
+    description="Food pantry scale system with temperature tracking",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/wyojustin/weighit",
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Other Audience",
+        "Topic :: Office/Business",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.12",
+    ],
+    python_requires=">=3.12",
+    install_requires=[
+        "streamlit>=1.31.0",
+        "pillow>=10.0.0",
+        "hidapi>=0.14.0",
+        "click>=8.1.0",
+    ],
+    extras_require={
+        "dev": [
+            "pytest>=7.4.0",
+            "pytest-cov>=4.1.0",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "weigh=weigh.cli_weigh:main",
+        ],
+    },
+    package_data={
+        "weigh": [
+            "schema.sql",
+            "assets/*.png",
+            "assets/*.css",
+        ],
+    },
+    include_package_data=True,
+)
+
+
+================================================================================
 # FILE PATH: /home/alarm/weighit/src/weigh/__init__.py
 ================================================================================
 
@@ -111,20 +399,39 @@ def get_sources() -> List[str]:
     return sorted(logger_core.get_sources_dict().keys())
 
 @st.cache_data(ttl=60.0)
-def get_types() -> List[str]:
-    return list(logger_core.get_types_dict().keys())
+def get_types() -> List[dict]:
+    """Returns list of type info dicts with name and requires_temp flag"""
+    types_dict = logger_core.get_types_dict()
+    types_list = []
+    for name, info in types_dict.items():
+        types_list.append({
+            "name": name,
+            "sort_order": info["sort_order"],
+            "requires_temp": info["requires_temp"]
+        })
+    return sorted(types_list, key=lambda x: x["sort_order"])
 
 def get_daily_totals_line() -> str:
-    totals = db_backend.get_daily_totals()
-    if not totals:
-        return "Today: 0.0 lbs"
-    parts = [f"{k}: {v:.1f}" for k, v in totals.items()]
+    current_source = st.session_state.get("source", None)
+    totals = db_backend.get_daily_totals(source=current_source)
+    
+    # Get all types to show them all (even if 0.0)
+    all_types = get_types()
+    
+    # Build parts list with all types in order
+    parts = []
+    for type_info in all_types:
+        type_name = type_info["name"]
+        weight = totals.get(type_name, 0.0)
+        parts.append(f"{type_name}: {weight:.1f}")
+    
     return " | ".join(parts)
 
 def get_history_html() -> str:
-    """Generates a fixed-height table with exactly 15 rows."""
+    """Generates a fixed-height table with exactly 15 rows filtered by current source."""
     limit = 15
-    entries = logger_core.get_recent_entries(limit)
+    current_source = st.session_state.get("source", None)
+    entries = logger_core.get_recent_entries(limit, source=current_source)
     
     rows_html = ""
     
@@ -136,11 +443,21 @@ def get_history_html() -> str:
         except Exception:
             ts_str = row["timestamp"]
 
+        # Add temperature info if present
+        temp_info = ""
+        if row.get("temp_pickup_f") is not None or row.get("temp_dropoff_f") is not None:
+            temps = []
+            if row.get("temp_pickup_f") is not None:
+                temps.append(f"Pick:{row['temp_pickup_f']:.1f}°F")
+            if row.get("temp_dropoff_f") is not None:
+                temps.append(f"Drop:{row['temp_dropoff_f']:.1f}°F")
+            temp_info = f" ({', '.join(temps)})"
+
         rows_html += (
             f"<tr>"
             f"<td>{ts_str}</td>"
             f"<td>{row['source']}</td>"
-            f"<td>{row['type']}</td>"
+            f"<td>{row['type']}{temp_info}</td>"
             f"<td>{row['weight_lb']:.2f} lb</td>"
             f"<td>Logged</td>"
             f"</tr>"
@@ -167,7 +484,7 @@ def load_logo(path: Path, height_px: int = 100) -> Optional[Image.Image]:
     scale = height_px / float(h)
     return img.resize((int(w * scale), height_px), Image.LANCZOS)
 
-def chunk_types(types: List[str]) -> List[List[str]]:
+def chunk_types(types: List[dict]) -> List[List[dict]]:
     if len(types) == 0: return []
     if len(types) <= 8: return [types]
     mid = (len(types) + 1) // 2
@@ -177,11 +494,82 @@ def safe_rerun():
     if hasattr(st, "rerun"):
         st.rerun()
 
+@st.dialog("Temperature Recording")
+def temperature_dialog():
+    """Modal dialog for recording temperatures"""
+    entry = st.session_state.pending_entry
+    if not entry or st.session_state.get("dialog_processed", False):
+        st.session_state.show_temp_dialog = False
+        st.session_state.dialog_processed = False
+        st.rerun()
+        return
+    
+    type_name = entry["type"]
+    weight = entry["weight"]
+    source = entry["source"]
+    
+    st.write(f"Recording temperatures for **{type_name}**")
+    st.write(f"Weight: **{weight:.2f} lb** from **{source}**")
+    
+    st.divider()
+    
+    # Temperature inputs with number_input for better mobile experience
+    temp_pickup = st.number_input(
+        "Pickup Temperature (°F)",
+        min_value=-40.0,
+        max_value=200.0,
+        value=40.0,
+        step=1.0,
+        format="%.1f",
+        help="Temperature at pickup location",
+        key="temp_pickup_input"
+    )
+    
+    temp_dropoff = st.number_input(
+        "Dropoff Temperature (°F)",
+        min_value=-40.0,
+        max_value=200.0,
+        value=38.0,
+        step=1.0,
+        format="%.1f",
+        help="Temperature at dropoff/storage location",
+        key="temp_dropoff_input"
+    )
+    
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Cancel", use_container_width=True, key="cancel_temp"):
+            st.session_state.show_temp_dialog = False
+            st.session_state.pending_entry = None
+            st.session_state.dialog_processed = True
+            st.rerun()
+    
+    with col2:
+        if st.button("Save Entry", type="primary", use_container_width=True, key="save_temp"):
+            # Log the entry with temperatures
+            logger_core.log_entry(
+                weight, 
+                source, 
+                type_name,
+                temp_pickup_f=temp_pickup,
+                temp_dropoff_f=temp_dropoff
+            )
+            
+            # Mark as processed and clear
+            st.session_state.dialog_processed = True
+            st.session_state.show_temp_dialog = False
+            st.session_state.pending_entry = None
+            
+            # Force dialog to close
+            st.rerun()
+
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
 # Inject Keyboard Listener (Ctrl-Z / Ctrl-Y)
-# This JS finds the buttons by their text content and clicks them.
 components.html("""
 <script>
 const doc = window.parent.document;
@@ -288,6 +676,12 @@ with st.sidebar:
 # Session State Defaults
 if "last_refresh_t" not in st.session_state:
     st.session_state.last_refresh_t = 0.0
+if "show_temp_dialog" not in st.session_state:
+    st.session_state.show_temp_dialog = False
+if "pending_entry" not in st.session_state:
+    st.session_state.pending_entry = None
+if "dialog_processed" not in st.session_state:
+    st.session_state.dialog_processed = False
 
 # ---------------- MAIN UI ----------------
 
@@ -295,7 +689,7 @@ if "last_refresh_t" not in st.session_state:
 try:
     scale = get_scale()
     reading = scale.get_latest()
-    weight_str = f"{reading.value:.1f}" if reading and reading.unit == "lb" else "—"
+    weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
 except Exception:
     scale = None
     weight_str = "Err"
@@ -313,23 +707,84 @@ with c2:
 
 with c3:
     img = load_logo(SCALE_LOGO, height_px=110)
-    if img: st.image(img)
+    if img:
+        # Hidden button for refresh
+        if st.button("refresh_hidden", key="refresh_scale", help="Click scale to refresh"):
+            safe_rerun()
+        # Show image with click handler
+        st.image(img, use_container_width=False)
+
+# Inject JavaScript to make scale image clickable
+components.html("""
+<script>
+const doc = window.parent.document;
+
+// Find the scale refresh button and the scale image
+function makeScaleClickable() {
+    const buttons = Array.from(doc.querySelectorAll('button'));
+    const refreshBtn = buttons.find(el => el.innerText.includes("refresh_hidden"));
+    
+    if (refreshBtn) {
+        // Hide the button
+        refreshBtn.style.display = 'none';
+        
+        // Find scale image (it's in the last column)
+        const images = Array.from(doc.querySelectorAll('img'));
+        const scaleImg = images[images.length - 1]; // Last image should be scale
+        
+        if (scaleImg) {
+            scaleImg.style.cursor = 'pointer';
+            scaleImg.onclick = function() {
+                refreshBtn.click();
+            };
+        }
+    }
+}
+
+// Run after page loads
+setTimeout(makeScaleClickable, 100);
+</script>
+""", height=0, width=0)
 
 # 3. Buttons
 types = get_types()
 rows = chunk_types(types)
 
-def on_log(tname):
+def on_log(type_info):
+    """Handle button click - check if temperature is required"""
     r = scale.read_stable_weight(timeout_s=0.5) if scale else None
     if r and r.unit == "lb":
         if r.value > 0.0:
             src = st.session_state.source
-            logger_core.log_entry(r.value, src, tname)
+            
+            # Check if this type requires temperature
+            if type_info["requires_temp"]:
+                # Store pending entry and show dialog
+                st.session_state.pending_entry = {
+                    "weight": r.value,
+                    "source": src,
+                    "type": type_info["name"]
+                }
+                st.session_state.show_temp_dialog = True
+                st.session_state.dialog_processed = False  # Reset the flag
+            else:
+                # Log directly without temperature
+                logger_core.log_entry(r.value, src, type_info["name"])
 
 for i, row in enumerate(rows):
     cols = st.columns(len(row), gap="small")
-    for idx, tname in enumerate(row):
-        cols[idx].button(tname, on_click=on_log, args=(tname,), use_container_width=True, key=f"btn_{i}_{idx}")
+    for idx, type_info in enumerate(row):
+        cols[idx].button(
+            type_info["name"], 
+            on_click=on_log, 
+            args=(type_info,), 
+            use_container_width=True, 
+            key=f"btn_{i}_{idx}"
+        )
+
+# Show temperature dialog if needed
+if st.session_state.get("show_temp_dialog", False):
+    temperature_dialog()
 
 # 4. Daily Totals
 totals_ph = st.empty()
@@ -339,13 +794,17 @@ totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', u
 history_ph = st.empty()
 history_ph.markdown(get_history_html(), unsafe_allow_html=True)
 
-# 6. Auto-Refresh
+# 6. Auto-Refresh - DISABLED when dialog exists
+# The dialog and auto-refresh conflict, so we disable auto-refresh
+# Users can manually click buttons to refresh
+# Uncomment below if you want auto-refresh back (but dialog won't work properly)
+junk = """
 now = time.time()
 if (now - st.session_state.last_refresh_t) > 0.5:
     st.session_state.last_refresh_t = now
     time.sleep(0.5)
     safe_rerun()
-
+"""
 
 
 ================================================================================
@@ -379,7 +838,7 @@ div[data-testid="stVerticalBlock"] {
 
 /* --- WEIGHT DISPLAY --- */
 .weight-box {
-    font-size: 160px; 
+    font-size: 120px; 
     font-weight: 900;
     text-align: center;
     line-height: 1.0;
@@ -589,7 +1048,7 @@ def get_sources():
 ================================================================================
 # FILE PATH: /home/alarm/weighit/src/weigh/db.py
 ================================================================================
-# db.py – Streamlit-safe SQLite access layer
+# db.py — Streamlit-safe SQLite access layer
 
 import sqlite3
 import os
@@ -605,7 +1064,7 @@ SCHEMA_PATH = None
 # IMPORTANT:
 # We no longer keep a long-lived connection in memory.
 # Each call to get_conn() returns a NEW connection.
-# This avoids Streamlit's “SQLite objects created in a thread…”
+# This avoids Streamlit's "SQLite objects created in a thread…"
 # errors entirely.
 #
 # However, schema initialization must be thread-safe:
@@ -650,7 +1109,6 @@ def initialize_schema_if_needed():
         
         conn = sqlite3.connect(DB_PATH)
         try:
-            # --- FIX START ---
             # Check if a key table (e.g., 'logs') already exists.
             # If it does, assume the DB is initialized and DO NOT run schema.sql.
             cur = conn.execute(
@@ -662,7 +1120,6 @@ def initialize_schema_if_needed():
                     with open(SCHEMA_PATH, "r") as f:
                         conn.executescript(f.read())
                     conn.commit()
-            # --- FIX END ---
         finally:
             conn.close()
 
@@ -736,7 +1193,7 @@ def fetch_types():
     conn = get_conn()
     try:
         return conn.execute(
-            "SELECT id, name, sort_order FROM types ORDER BY sort_order"
+            "SELECT id, name, sort_order, requires_temp FROM types ORDER BY sort_order"
         ).fetchall()
     finally:
         conn.close()
@@ -771,11 +1228,12 @@ def list_types():
 # DAILY TOTALS
 # ---------------------
 
-def get_daily_totals():
+def get_daily_totals(source=None):
     """
     Returns dict: {type_name: total_weight_lbs}
+    Optionally filtered by source.
     """
-    return logger_core.totals_today_weight_per_type()
+    return logger_core.totals_today_weight_per_type(source=source)
 
 
 ================================================================================
@@ -994,13 +1452,15 @@ if __name__ == "__main__":
 ================================================================================
 # src/weigh/logger_core.py
 from datetime import datetime, UTC
+from typing import Optional
 from weigh.db import get_conn, fetch_sources, fetch_types
 
 def get_logs_between(start_date: str, end_date: str):
     conn = get_conn()
     rows = conn.execute("""
         SELECT l.id, l.timestamp, l.weight_lb, l.source_id, l.type_id,
-               s.name AS source, t.name AS type
+               s.name AS source, t.name AS type,
+               l.temp_pickup_f, l.temp_dropoff_f
         FROM logs l
         JOIN sources s ON l.source_id = s.id
         JOIN types t   ON l.type_id = t.id
@@ -1010,48 +1470,115 @@ def get_logs_between(start_date: str, end_date: str):
     """, (start_date, end_date)).fetchall()
     return [dict(row) for row in rows]
 
-def get_recent_entries(limit: int = 5):
+def get_recent_entries(limit: int = 5, source: Optional[str] = None):
     conn = get_conn()
-    rows = conn.execute("""
-        SELECT l.timestamp, l.weight_lb, s.name as source, t.name as type
-        FROM logs l
-        JOIN sources s ON l.source_id = s.id
-        JOIN types t   ON l.type_id = t.id
-        WHERE l.deleted = 0
-        ORDER BY l.id DESC
-        LIMIT ?
-    """, (limit,)).fetchall()
+    
+    if source:
+        # Filter by source
+        rows = conn.execute("""
+            SELECT l.timestamp, l.weight_lb, s.name as source, t.name as type,
+                   l.temp_pickup_f, l.temp_dropoff_f
+            FROM logs l
+            JOIN sources s ON l.source_id = s.id
+            JOIN types t   ON l.type_id = t.id
+            WHERE l.deleted = 0 AND s.name = ?
+            ORDER BY l.id DESC
+            LIMIT ?
+        """, (source, limit)).fetchall()
+    else:
+        # Show all sources
+        rows = conn.execute("""
+            SELECT l.timestamp, l.weight_lb, s.name as source, t.name as type,
+                   l.temp_pickup_f, l.temp_dropoff_f
+            FROM logs l
+            JOIN sources s ON l.source_id = s.id
+            JOIN types t   ON l.type_id = t.id
+            WHERE l.deleted = 0
+            ORDER BY l.id DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    
     return [dict(r) for r in rows]
 
-def totals_today_weight_per_type():
+def totals_today_weight_per_type(source: Optional[str] = None):
     conn = get_conn()
     today = datetime.now(UTC).date().isoformat()
-    rows = conn.execute("""
-        SELECT t.name, SUM(l.weight_lb) as total
-        FROM logs l
-        JOIN types t ON l.type_id = t.id
-        WHERE DATE(l.timestamp) = ?
-          AND l.deleted = 0
-        GROUP BY t.name
-        ORDER BY t.sort_order;
-    """, (today,)).fetchall()
+    
+    if source:
+        # Filter by source
+        rows = conn.execute("""
+            SELECT t.name, SUM(l.weight_lb) as total
+            FROM logs l
+            JOIN types t ON l.type_id = t.id
+            JOIN sources s ON l.source_id = s.id
+            WHERE DATE(l.timestamp) = ?
+              AND l.deleted = 0
+              AND s.name = ?
+            GROUP BY t.name
+            ORDER BY t.sort_order;
+        """, (today, source)).fetchall()
+    else:
+        # Show all sources
+        rows = conn.execute("""
+            SELECT t.name, SUM(l.weight_lb) as total
+            FROM logs l
+            JOIN types t ON l.type_id = t.id
+            WHERE DATE(l.timestamp) = ?
+              AND l.deleted = 0
+            GROUP BY t.name
+            ORDER BY t.sort_order;
+        """, (today,)).fetchall()
+    
     return {row["name"]: row["total"] if row["total"] else 0.0 for row in rows}
 
 def get_sources_dict():
     return {row["name"]: row["id"] for row in fetch_sources()}
 
 def get_types_dict():
-    return {row["name"]: row["id"] for row in fetch_types()}
+    """Returns dict with type info including requires_temp flag"""
+    types = fetch_types()
+    result = {}
+    for row in types:
+        result[row["name"]] = {
+            "id": row["id"],
+            "sort_order": row["sort_order"],
+            "requires_temp": bool(row["requires_temp"]) if row["requires_temp"] is not None else False
+        }
+    return result
 
-def log_entry(weight_lb: float, source: str, type_: str):
+def type_requires_temp(type_name: str) -> bool:
+    """Check if a given type requires temperature logging"""
+    types = get_types_dict()
+    return types.get(type_name, {}).get("requires_temp", False)
+
+def log_entry(
+    weight_lb: float, 
+    source: str, 
+    type_: str,
+    temp_pickup_f: Optional[float] = None,
+    temp_dropoff_f: Optional[float] = None
+):
+    """
+    Log a weight entry with optional temperature data.
+    
+    Args:
+        weight_lb: Weight in pounds
+        source: Source name (e.g., "Trader Joe's")
+        type_: Type name (e.g., "Meat", "Produce")
+        temp_pickup_f: Temperature at pickup in Fahrenheit (optional)
+        temp_dropoff_f: Temperature at dropoff in Fahrenheit (optional)
+    """
     conn = get_conn()
     sources = get_sources_dict()
     types = get_types_dict()
     ts = datetime.now(UTC).isoformat()
+    
     conn.execute("""
-        INSERT INTO logs (timestamp, weight_lb, source_id, type_id, deleted)
-        VALUES (?, ?, ?, ?, 0)
-    """, (ts, weight_lb, sources[source], types[type_]))
+        INSERT INTO logs (timestamp, weight_lb, source_id, type_id, deleted, 
+                         temp_pickup_f, temp_dropoff_f)
+        VALUES (?, ?, ?, ?, 0, ?, ?)
+    """, (ts, weight_lb, sources[source], types[type_]["id"], 
+          temp_pickup_f, temp_dropoff_f))
     conn.commit()
 
 def undo_last_entry():
@@ -1118,10 +1645,22 @@ def generate_report_csv(start_date, end_date):
     # 1. Fetch Data
     logs = logger_core.get_logs_between(start_date, end_date)
     
-    # 2. Calculate Summaries: totals[source][type] = weight
-    totals = defaultdict(lambda: defaultdict(float))
+    # 2. Calculate Summaries: totals[source][type] = {weight, temps}
+    totals = defaultdict(lambda: defaultdict(lambda: {
+        'weight': 0.0,
+        'all_temps': []
+    }))
+    
     for row in logs:
-        totals[row["source"]][row["type"]] += row["weight_lb"]
+        src = row["source"]
+        typ = row["type"]
+        totals[src][typ]['weight'] += row["weight_lb"]
+        
+        # Collect all temperature data (pickup and dropoff combined)
+        if row.get('temp_pickup_f') is not None:
+            totals[src][typ]['all_temps'].append(row['temp_pickup_f'])
+        if row.get('temp_dropoff_f') is not None:
+            totals[src][typ]['all_temps'].append(row['temp_dropoff_f'])
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -1130,23 +1669,58 @@ def generate_report_csv(start_date, end_date):
     writer.writerow(["SUMMARY REPORT", f"{start_date} to {end_date}"])
     writer.writerow([]) # Blank line
     
-    writer.writerow(["Source", "Type", "Total Weight (lb)"])
-    
     # Sort alphabetically by Source, then Type
     for src in sorted(totals.keys()):
-        for typ in sorted(totals[src].keys()):
-            weight = totals[src][typ]
-            writer.writerow([src, typ, f"{weight:.2f}"])
+        # Separate temp-controlled and non-temp items
+        temp_items = {}
+        non_temp_items = {}
+        
+        for typ, data in totals[src].items():
+            if data['all_temps']:  # Has temperature data
+                temp_items[typ] = data
+            else:
+                non_temp_items[typ] = data
+        
+        # Write source name only once at the top
+        writer.writerow([src])
+        # Single header row for all items
+        writer.writerow(["Type", "Total Weight (lb)", "Min Temp (°F)", "Max Temp (°F)"])
+        
+        # Non-temperature items (with empty temp columns)
+        for typ in sorted(non_temp_items.keys()):
+            weight = non_temp_items[typ]['weight']
+            writer.writerow([typ, f"{weight:.2f}", "", ""])
+        
+        # Temperature-controlled items (with temp data)
+        for typ in sorted(temp_items.keys()):
+            data = temp_items[typ]
+            weight = data['weight']
+            min_temp = f"{min(data['all_temps']):.1f}"
+            max_temp = f"{max(data['all_temps']):.1f}"
+            writer.writerow([typ, f"{weight:.2f}", min_temp, max_temp])
+        
+        # Blank line between sources
+        writer.writerow([])
             
-    writer.writerow([]) # Blank lines to separate sections
-    writer.writerow([])
+    writer.writerow([]) # Extra blank line before detailed section
     
     # 4. Write Detailed Section
     writer.writerow(["DETAILED LOGS"])
-    writer.writerow(["Timestamp", "Source", "Type", "Weight (lb)"])
+    writer.writerow(["Timestamp", "Source", "Type", "Weight (lb)", "Pickup Temp (°F)", "Dropoff Temp (°F)"])
 
     for row in logs:
-        writer.writerow([row["timestamp"], row["source"], row["type"], row["weight_lb"]])
+        # Format temperature values
+        temp_pickup = f"{row['temp_pickup_f']:.1f}" if row.get('temp_pickup_f') is not None else ""
+        temp_dropoff = f"{row['temp_dropoff_f']:.1f}" if row.get('temp_dropoff_f') is not None else ""
+        
+        writer.writerow([
+            row["timestamp"], 
+            row["source"], 
+            row["type"], 
+            row["weight_lb"],
+            temp_pickup,
+            temp_dropoff
+        ])
 
     return buf.getvalue().encode("utf-8")
 

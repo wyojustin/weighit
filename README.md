@@ -1,314 +1,287 @@
-# WeighIt - Food Pantry Scale System
+# WeighIt
 
-A comprehensive food donation tracking system designed for food pantries, featuring real-time weight measurement, temperature logging for perishables, and automated reporting.
+Food pantry scale application for tracking donations.
 
-![Python Version](https://img.shields.io/badge/python-3.12-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Streamlit](https://img.shields.io/badge/streamlit-1.31+-red)
+## Features
 
-## 🎯 Features
+- Real-time weight measurement from USB scale
+- Track donations by source and type
+- Temperature monitoring for perishable items (Meat, Dairy, Prepared)
+- Daily totals and reporting
+- Streamlit web interface optimized for tablets
+- Command-line interface for quick logging
 
-- **Real-time Weight Tracking**: Direct integration with Dymo M25/S250 USB scales
-- **Temperature Logging**: Automatic temperature recording for perishable items (Meat, Dairy, Prepared foods)
-- **Source Management**: Track donations from multiple sources (stores, donors, etc.)
-- **Food Type Categories**: Pre-configured categories (Produce, Bread, Dairy, Meat, etc.)
-- **Daily Summaries**: Real-time totals filtered by current source
-- **History Tracking**: View last 15 entries per source
-- **CSV Reports**: Generate detailed reports with temperature ranges
-- **Email Reports**: Automatically email CSV reports to recipients
-- **Undo/Redo**: Keyboard shortcuts (Ctrl-Z/Ctrl-Y) for quick corrections
-- **Touch-Friendly UI**: Optimized for tablet use (designed for PineTab2)
+## Requirements
 
-## 🖼️ Screenshots
+- Python 3.8+
+- USB scale compatible with `usb_scale` library
+- Linux system (tested on PineTab2 with ARM architecture)
+- Miniconda or Anaconda (recommended)
 
-### Main Interface
-Large weight display, food type buttons, and real-time history tracking.
-
-![Main Interface](docs/images/main-interface.png)
-
-### Temperature Dialog
-Automatic popup for temperature-controlled items with pickup and dropoff temperature fields.
-
-![Temperature Dialog](docs/images/temperature-dialog.png)
-
-### CSV Report
-Comprehensive summary with weight totals and temperature ranges per source.
-
-![CSV Report Example](docs/images/csv-report.png)
-
-### History Table
-Recent entries showing inline temperature information.
-
-![History Table](docs/images/history-table.png)
-
-## 🛠️ Hardware Requirements
-
-- **Scale**: Dymo M25 or S250 USB scale (VID: 0x0922, PID: 0x8009)
-- **Computer**: Any Linux-based system with USB support
-  - Tested on PineTab2 (ARM64)
-  - Works on x86_64 systems
-- **Display**: Touchscreen recommended (1280x800 or higher)
-
-## 📋 Prerequisites
-
-- Python 3.12 or higher
-- USB access for HID devices
-- SMTP credentials for email reporting (optional)
-
-## 🚀 Installation
-
-### For Conda Users (Recommended for PineTab2)
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/wyojustin/weighit.git
-cd weighit
-
-# 2. Create conda environment
-conda create -n foodlog python=3.12
-conda activate foodlog
-
-# 3. Install dependencies
-pip install streamlit pillow hidapi click
-
-# 4. Set Python path (instead of pip install -e .)
-export PYTHONPATH=/home/alarm/weighit/src:$PYTHONPATH
-# Add to ~/.bashrc to make permanent:
-echo 'export PYTHONPATH=/home/alarm/weighit/src:$PYTHONPATH' >> ~/.bashrc
-
-# 5. Run database migration
-python migrate_db.py
-
-# 6. Launch the app
-streamlit run src/weigh/app.py
-```
-
-### For Virtual Environment Users
+## Installation
 
 ### 1. Clone the Repository
+
 ```bash
 git clone https://github.com/wyojustin/weighit.git
 cd weighit
 ```
 
-### 2. Create Virtual Environment
+### 2. Set Up Python Environment
+
+Using conda (recommended):
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+conda create -n foodlog python=3.11
+conda activate foodlog
+pip install -r requirements.txt --break-system-packages
 ```
 
-### 3. Install Dependencies
+Or using venv:
 ```bash
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Set Up Database
+### 3. Initialize Database
+
+The database will be created automatically on first run at `~/weighit/weigh.db`.
+
+Default sources and food types are pre-configured:
+- **Sources**: Food for Neighbors, Trader Joe's, Whole Foods, Wegmans, Safeway, Good Shepherd donations, FreshFarm St John Neumann
+- **Types**: Produce, Dry, Dairy, Meat, Prepared, Bread, Non-food
+
+### 4. Desktop Launcher Installation (Linux)
+
+WeighIt includes a desktop launcher for easy access on Linux systems.
+
+#### Quick Install
+
 ```bash
-# The database will be created automatically at ~/weighit/weigh.db
-# Or run the migration script if you have an existing database
-python migrate_db.py
+./install_desktop_launcher.sh
 ```
 
-### 5. Configure Email (Optional)
-Create `.streamlit/secrets.toml`:
+After installation, you can launch WeighIt from your application menu or pin it to your favorites.
+
+#### What It Does
+
+The installer:
+- Creates a desktop entry with the correct installation paths
+- Makes the launch script executable
+- Adds WeighIt to your application menu
+- Sets up the scale icon
+
+See [DESKTOP_LAUNCHER.md](DESKTOP_LAUNCHER.md) for manual installation instructions and customization options.
+
+#### Uninstall Desktop Launcher
+
 ```bash
-mkdir -p .streamlit
-cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+rm ~/.local/share/applications/weighit.desktop
 ```
 
-Edit `.streamlit/secrets.toml` with your SMTP credentials:
-```toml
-[email]
-smtp_server = "smtp.gmail.com"
-smtp_port = 587
-sender_email = "your-email@gmail.com"
-sender_password = "your-app-password"
-default_recipient = "recipient@example.com"
-```
+## Usage
 
-### 6. Set Up USB Permissions (Linux)
-Create a udev rule for the Dymo scale:
-```bash
-sudo nano /etc/udev/rules.d/99-dymo-scale.rules
-```
+### Streamlit Web Interface (Primary)
 
-Add this line:
-```
-SUBSYSTEM=="usb", ATTRS{idVendor}=="0922", ATTRS{idProduct}=="8009", MODE="0666"
-```
-
-**Note:** Use `ATTRS` (plural) not `ATTR` for proper matching.
-
-Reload udev rules:
-```bash
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
-**IMPORTANT:** After reloading udev rules, **unplug and replug the scale** for the new permissions to take effect!
-
-Verify permissions:
-```bash
-lsusb  # Find your scale's bus and device number
-ls -l /dev/bus/usb/001/XXX  # Check it shows your user, not just root
-```
-
-## 🎮 Usage
-
-### Running the Application
+Start the application:
 ```bash
 streamlit run src/weigh/app.py
 ```
 
-The interface will open at `http://localhost:8501`
+Or use the provided launcher script:
+```bash
+./launch.sh
+```
 
-### Basic Workflow
-1. **Select Source**: Choose the donation source from the sidebar dropdown
-2. **Place Item**: Put the item on the scale and wait for stable reading
-3. **Click Food Type**: Click the appropriate button (e.g., Produce, Dairy, Meat)
-4. **Temperature Entry** (if required): For Meat/Dairy/Prepared, enter pickup and dropoff temperatures
-5. **Review**: Check the history table to verify the entry
+The interface will open in kiosk mode in Chromium, optimized for tablet use.
 
-### Keyboard Shortcuts
-- **Ctrl-Z**: Undo last entry
-- **Ctrl-Y**: Redo last undo
-- **Click Scale Icon**: Refresh weight display
+### Command-Line Interface
 
-### Generating Reports
-1. Open the sidebar
-2. Select date range
-3. Enter recipient email (or download directly)
-4. Click "Email CSV" or "Download CSV"
+Log a donation:
+```bash
+python -m weigh.cli_weigh log "Trader Joe's" "Produce" 10.5
+```
 
-## 📊 Database Schema
+View today's totals:
+```bash
+python -m weigh.cli_weigh totals
+```
+
+Show recent entries:
+```bash
+python -m weigh.cli_weigh tail -n 10
+```
+
+Undo last entry:
+```bash
+python -m weigh.cli_weigh undo
+```
+
+Add a new source:
+```bash
+python -m weigh.cli_weigh source add "New Store"
+```
+
+List all sources:
+```bash
+python -m weigh.cli_weigh source list
+```
+
+## Database Schema
 
 ### Tables
-- **sources**: Donation sources (Trader Joe's, Safeway, etc.)
-- **types**: Food categories with temperature requirements
-- **logs**: Individual weight entries with timestamps and temperatures
 
-### Temperature Tracking
-Items marked as temperature-controlled (Meat, Dairy, Prepared) automatically trigger temperature recording:
-- `temp_pickup_f`: Temperature at pickup location (°F)
-- `temp_dropoff_f`: Temperature at dropoff/storage location (°F)
+**sources** - Donation sources (stores, organizations)
+- `id`: Primary key
+- `name`: Source name
 
-## 🔧 Configuration
+**types** - Food categories
+- `id`: Primary key
+- `name`: Type name (Produce, Dry, Dairy, etc.)
+- `sort_order`: Display order
+- `requires_temp`: Boolean flag for temperature tracking
 
-### Adding New Sources
-Via CLI:
+**logs** - Donation records
+- `id`: Primary key
+- `timestamp`: Date and time of donation
+- `weight_lb`: Weight in pounds
+- `source_id`: Foreign key to sources
+- `type_id`: Foreign key to types
+- `temp_pickup_f`: Temperature at pickup (Fahrenheit)
+- `temp_dropoff_f`: Temperature at dropoff (Fahrenheit)
+- `deleted`: Soft delete flag
+
+## Temperature Tracking
+
+Certain food types (Meat, Dairy, Prepared) require temperature monitoring:
+- **Pickup Temperature**: Temperature when received from donor
+- **Dropoff Temperature**: Temperature when placed in storage
+
+The interface automatically prompts for temperatures when logging these items.
+
+## Database Migrations
+
+If you have an existing database, run migrations to add new features:
+
+### Add Temperature Tracking
 ```bash
-python -m weigh.cli_weigh source add "New Grocery Store"
+python migrate_db.py
 ```
 
-Via Database:
-```sql
-INSERT INTO sources (name) VALUES ('New Grocery Store');
-```
-
-### Adding New Food Types
-Edit `src/weigh/schema.sql` and add to the types table:
-```sql
-INSERT INTO types (name, sort_order, requires_temp) VALUES 
-    ('Beverages', 9, 0);
-```
-
-Then recreate the database or manually insert.
-
-## 📝 CLI Tool
-
-WeighIt includes a command-line interface for manual operations:
-
+### Rename Temperature Columns (if needed)
 ```bash
-# Log an entry
-weigh log "Trader Joe's" Produce 5.4
-
-# Show daily totals
-weigh totals
-
-# View last 10 entries
-weigh tail -n 10
-
-# Undo last entry
-weigh undo
-
-# List sources
-weigh source list
-
-# Add a new source
-weigh source add "Costco"
+python migrate_rename_temps.py
 ```
 
-## 🧪 Testing
+## Development
 
-Run the test suite:
+### Running Tests
+
 ```bash
 pytest tests/
 ```
 
-Run specific test:
-```bash
-pytest tests/test_logging.py
+### Project Structure
+
+```
+weighit/
+├── src/
+│   └── weigh/
+│       ├── app.py              # Main Streamlit application
+│       ├── cli_weigh.py        # Command-line interface
+│       ├── dao.py              # Database access layer
+│       ├── db.py               # Database initialization
+│       ├── logger_core.py      # Logging business logic
+│       ├── scale.py            # USB scale interface
+│       ├── schema.sql          # Database schema
+│       ├── ui_components.py    # Streamlit UI components
+│       └── assets/
+│           └── scale_icon.png  # Application icon
+├── tests/                      # Test suite
+├── launch.sh                   # Application launcher
+├── install_desktop_launcher.sh # Desktop launcher installer
+├── weighit.desktop.template    # Desktop entry template
+├── migrate_db.py              # Database migration scripts
+└── requirements.txt           # Python dependencies
 ```
 
-## 🐛 Troubleshooting
+## Configuration
+
+### Streamlit Settings
+
+The application uses custom Streamlit configuration (`.streamlit/config.toml`):
+
+```toml
+[client]
+showSidebarNavigation = false
+toolbarMode = "minimal"
+
+[ui]
+hideTopBar = true
+
+[browser]
+gatherUsageStats = false
+```
+
+### Launch Script Customization
+
+Edit `launch.sh` to customize:
+- Conda environment name
+- Chromium flags
+- Window size and display settings
+
+## Hardware
+
+This application was developed for use with:
+- **Device**: PineTab2 (ARM-based tablet)
+- **Scale**: USB-connected food scale
+- **OS**: Linux (Arch Linux ARM)
+
+It should work on any Linux system with a compatible USB scale.
+
+## Troubleshooting
 
 ### Scale Not Detected
-1. Check USB connection
-2. Verify udev rules are set correctly
-3. Run `lsusb` to confirm device is visible
-4. Check device permissions
 
-### Temperature Dialog Not Closing
-- This was fixed by removing auto-refresh
-- Ensure you're running the latest version
+Check USB permissions:
+```bash
+lsusb
+sudo chmod 666 /dev/bus/usb/XXX/YYY
+```
 
-### Database Locked Error
-- Close any other connections to the database
-- Restart the application
+Or add a udev rule for persistent access.
 
-### Email Not Sending
-- Verify SMTP credentials in `secrets.toml`
-- For Gmail, use an App Password, not your regular password
-- Check firewall settings for outbound SMTP
+### Database Issues
 
-## 🤝 Contributing
+Reset the database:
+```bash
+rm ~/weighit/weigh.db
+# Restart the application to recreate
+```
 
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Streamlit Not Starting
 
-## 📄 License
+Check if port 8501 is already in use:
+```bash
+lsof -i :8501
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Kill the process if needed:
+```bash
+kill -9 <PID>
+```
 
-## 🙏 Acknowledgments
+## Contributing
 
-- Built with [Streamlit](https://streamlit.io/)
-- Scale communication via [hidapi](https://github.com/libusb/hidapi)
-- Designed for use at South Lakes Food Pantry
+Pull requests are welcome! Please ensure:
+- Tests pass: `pytest tests/`
+- Code follows existing style
+- Database changes include migration scripts
 
-## 📧 Contact
+## License
 
-Project Link: [https://github.com/wyojustin/weighit](https://github.com/wyojustin/weighit)
+[Add your license here]
 
-## 🗺️ Roadmap
+## Acknowledgments
 
-- [ ] Multi-language support
-- [ ] Barcode scanning integration
-- [ ] Photo capture of donations
-- [ ] Cloud database sync
-- [ ] Mobile app companion
-- [ ] Nutrition information lookup
-- [ ] Donor receipt generation
-- [ ] Analytics dashboard
-
-## 📚 Documentation
-
-For more detailed documentation, see:
-- [Installation Guide](docs/INSTALLATION.md)
-- [Hardware Setup](docs/HARDWARE.md)
-- [Configuration Guide](docs/CONFIGURATION.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
+Built for food pantry volunteers to efficiently track donations and maintain food safety standards.
