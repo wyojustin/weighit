@@ -1,8 +1,30 @@
 /* assets/style.css */
 
+/* --- SIDEBAR OVERLAY MODE --- */
+/* Make sidebar overlay content instead of pushing it */
+section[data-testid="stSidebar"] {
+    position: fixed !important;
+    z-index: 999 !important;
+    background-color: rgba(255, 255, 255, 0.98) !important;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    section[data-testid="stSidebar"] {
+        background-color: rgba(14, 17, 23, 0.98) !important;
+    }
+}
+
+/* Keep main content full width when sidebar is open */
+.main .block-container {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
 /* --- GLOBAL LAYOUT --- */
 .block-container {
-    padding-top: 3rem !important; 
+    padding-top: 3rem !important;
     padding-bottom: 1rem !important;
     padding-left: 1rem !important;
     padding-right: 1rem !important;
