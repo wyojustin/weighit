@@ -245,11 +245,74 @@ It should work on any Linux system with a compatible USB scale.
 
 Check USB permissions:
 ```bash
-lsusb
-sudo chmod 666 /dev/bus/usb/XXX/YYY
+lsusb | grep -i dymo
 ```
 
-Or add a udev rule for persistent access.
+Create a udev rule for persistent access (recommended):
+```bash
+sudo tee /etc/udev/rules.d/99-dymo-scale.rules << 'EOF'
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0922", ATTRS{idProduct}=="8009", MODE="0666"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0922", ATTRS{idProduct}=="8009", MODE="0666"
+EOF
+
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Then unplug and replug the scale.
+
+### Network Access (mDNS/Avahi)
+
+To access the PineTab2 by hostname (e.g., `scale.local`) instead of IP address:
+
+1. Install avahi:
+```bash
+sudo pacman -S avahi nss-mdns
+```
+
+2. Enable and start the daemon:
+```bash
+sudo systemctl enable avahi-daemon
+sudo systemctl start avahi-daemon
+```
+
+3. Set a hostname:
+```bash
+sudo hostnamectl set-hostname scale
+```
+
+4. Enable mDNS resolution:
+```bash
+sudo sed -i 's/hosts:.*/hosts: mypfiles mdns_minimal [NOTFOUND=return] dns/' /etc/nsswitch.conf
+```
+
+After reboot, you can reach the device at `scale.local` from any device on the same network.
+
+### Streamlit Shutdown on Reboot
+
+If rebooting takes a long time with Streamlit running, add a systemd service to kill it on shutdown:
+
+```bash
+sudo tee /etc/systemd/system/kill-streamlit.service << 'EOF'
+[Unit]
+Description=Kill Streamlit on shutdown
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+ExecStop=/usr/bin/pkill -9 -f streamlit
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable kill-streamlit.service
+sudo systemctl start kill-streamlit.service
+```
 
 ### Database Issues
 
