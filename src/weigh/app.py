@@ -1,6 +1,8 @@
 # src/weigh/app.py
 from __future__ import annotations
 
+import os
+import signal
 import time
 import textwrap
 from datetime import datetime, date, timezone
@@ -321,6 +323,15 @@ with st.sidebar:
         "text/csv",
         use_container_width=True
     )
+
+    st.divider()
+
+    # --- CLOSE APPLICATION ---
+    if st.button("Close Application", type="secondary", use_container_width=True):
+        st.warning("Shutting down...")
+        # Kill chromium and streamlit
+        os.system("pkill -f chromium")
+        os.kill(os.getpid(), signal.SIGTERM)
 
 # Session State Defaults
 if "last_refresh_t" not in st.session_state:
