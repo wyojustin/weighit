@@ -57,6 +57,34 @@ Recent entries showing inline temperature information.
 
 ## 🚀 Installation
 
+### For Conda Users (Recommended for PineTab2)
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/wyojustin/weighit.git
+cd weighit
+
+# 2. Create conda environment
+conda create -n foodlog python=3.12
+conda activate foodlog
+
+# 3. Install dependencies
+pip install streamlit pillow hidapi click
+
+# 4. Set Python path (instead of pip install -e .)
+export PYTHONPATH=/home/alarm/weighit/src:$PYTHONPATH
+# Add to ~/.bashrc to make permanent:
+echo 'export PYTHONPATH=/home/alarm/weighit/src:$PYTHONPATH' >> ~/.bashrc
+
+# 5. Run database migration
+python migrate_db.py
+
+# 6. Launch the app
+streamlit run src/weigh/app.py
+```
+
+### For Virtual Environment Users
+
 ### 1. Clone the Repository
 ```bash
 git clone https://github.com/wyojustin/weighit.git
@@ -106,13 +134,23 @@ sudo nano /etc/udev/rules.d/99-dymo-scale.rules
 
 Add this line:
 ```
-SUBSYSTEM=="usb", ATTR{idVendor}=="0922", ATTR{idProduct}=="8009", MODE="0666"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0922", ATTRS{idProduct}=="8009", MODE="0666"
 ```
+
+**Note:** Use `ATTRS` (plural) not `ATTR` for proper matching.
 
 Reload udev rules:
 ```bash
 sudo udevadm control --reload-rules
 sudo udevadm trigger
+```
+
+**IMPORTANT:** After reloading udev rules, **unplug and replug the scale** for the new permissions to take effect!
+
+Verify permissions:
+```bash
+lsusb  # Find your scale's bus and device number
+ls -l /dev/bus/usb/001/XXX  # Check it shows your user, not just root
 ```
 
 ## 🎮 Usage
