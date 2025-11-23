@@ -41,3 +41,4 @@ INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Meat', 3);
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Prepared', 4);
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Bread', 5);
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Non-food', 6);
+UPDATE types SET requires_temp=1 WHERE name IN ('Dairy', 'Meat', 'Prepared');
