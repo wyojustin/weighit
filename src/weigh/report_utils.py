@@ -14,22 +14,23 @@ def generate_report_csv(start_date, end_date):
     # 1. Fetch Data
     logs = logger_core.get_logs_between(start_date, end_date)
     
-    # 2. Calculate Summaries: totals[source][type] = {weight, temps}
+    # 2. Calculate Summaries: totals[source][type] = {weight, pickup_temps, dropoff_temps}
     totals = defaultdict(lambda: defaultdict(lambda: {
         'weight': 0.0,
-        'all_temps': []
+        'pickup_temps': [],
+        'dropoff_temps': []
     }))
-    
+
     for row in logs:
         src = row["source"]
         typ = row["type"]
         totals[src][typ]['weight'] += row["weight_lb"]
-        
-        # Collect all temperature data (pickup and dropoff combined)
+
+        # Collect temperature data separately for pickup and dropoff
         if row.get('temp_pickup_f') is not None:
-            totals[src][typ]['all_temps'].append(row['temp_pickup_f'])
+            totals[src][typ]['pickup_temps'].append(row['temp_pickup_f'])
         if row.get('temp_dropoff_f') is not None:
-            totals[src][typ]['all_temps'].append(row['temp_dropoff_f'])
+            totals[src][typ]['dropoff_temps'].append(row['temp_dropoff_f'])
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -45,7 +46,7 @@ def generate_report_csv(start_date, end_date):
         non_temp_items = {}
         
         for typ, data in totals[src].items():
-            if data['all_temps']:  # Has temperature data
+            if data['pickup_temps'] or data['dropoff_temps']:  # Has temperature data
                 temp_items[typ] = data
             else:
                 non_temp_items[typ] = data
@@ -53,20 +54,20 @@ def generate_report_csv(start_date, end_date):
         # Write source name only once at the top
         writer.writerow([src])
         # Single header row for all items
-        writer.writerow(["Type", "Total Weight (lb)", "Min Temp (°F)", "Max Temp (°F)"])
-        
+        writer.writerow(["Type", "Total Weight (lb)", "Avg Pickup Temp (°F)", "Avg Dropoff Temp (°F)"])
+
         # Non-temperature items (with empty temp columns)
         for typ in sorted(non_temp_items.keys()):
             weight = non_temp_items[typ]['weight']
             writer.writerow([typ, f"{weight:.2f}", "", ""])
-        
+
         # Temperature-controlled items (with temp data)
         for typ in sorted(temp_items.keys()):
             data = temp_items[typ]
             weight = data['weight']
-            min_temp = f"{min(data['all_temps']):.1f}"
-            max_temp = f"{max(data['all_temps']):.1f}"
-            writer.writerow([typ, f"{weight:.2f}", min_temp, max_temp])
+            avg_pickup = f"{sum(data['pickup_temps']) / len(data['pickup_temps']):.1f}" if data['pickup_temps'] else ""
+            avg_dropoff = f"{sum(data['dropoff_temps']) / len(data['dropoff_temps']):.1f}" if data['dropoff_temps'] else ""
+            writer.writerow([typ, f"{weight:.2f}", avg_pickup, avg_dropoff])
         
         # Blank line between sources
         writer.writerow([])
