@@ -3,10 +3,13 @@
 
 import time
 import threading
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
 import hid  # from hidapi
+
+logger = logging.getLogger(__name__)
 
 VENDOR_ID = 0x0922
 PRODUCT_ID = 0x8009  # Dymo S250 / S100 family
@@ -32,9 +35,9 @@ class DymoHIDScale:
     """
 
     def __init__(self, vendor_id: int = VENDOR_ID, product_id: int = PRODUCT_ID):
-        print("Enumerating HID devices...")
+        logger.info("Enumerating HID devices...")
         for info in hid.enumerate():
-            print(
+            logger.debug(
                 f"  VID={info['vendor_id']:04x} "
                 f"PID={info['product_id']:04x} "
                 f"path={info['path']}"
@@ -45,7 +48,7 @@ class DymoHIDScale:
 
         # Use BLOCKING reads in the reader thread so we never miss packets
         self.dev.set_nonblocking(False)
-        print(f"Opened Dymo scale VID=0x{vendor_id:04x} PID=0x{product_id:04x}")
+        logger.info(f"Opened Dymo scale VID=0x{vendor_id:04x} PID=0x{product_id:04x}")
 
         self._latest: Optional[ScaleReading] = None
         self._lock = threading.Lock()

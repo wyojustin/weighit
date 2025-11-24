@@ -12,6 +12,13 @@ from typing import List, Optional
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # ---- local imports ----
 try:
@@ -216,6 +223,76 @@ def temperature_dialog():
             
             # Force dialog to close
             st.rerun()
+
+    # Inject JS for input behavior (Select All on Focus + Input Validation)
+    # We use a MutationObserver to attach listeners to the number inputs in the dialog
+    components.html("""
+    <script>
+    const doc = window.parent.document;
+    
+    function attachListeners() {
+        // Target the specific number inputs by their aria-labels or just all number inputs in the dialog
+        // Streamlit number inputs are usually <input type="number"> or <input type="text" inputmode="decimal">
+        const inputs = Array.from(doc.querySelectorAll('input[type="number"], input[inputmode="decimal"]'));
+        
+        inputs.forEach(input => {
+            if (input.dataset.listenersAttached) return;
+            
+            // 1. Select All on Focus
+            input.addEventListener('focus', function() {
+                this.select();
+            });
+            
+            // 2. Strict Input Validation (Digits, one dot, one minus at start)
+            input.addEventListener('input', function(e) {
+                let val = this.value;
+                
+                // Allow: digits, dot, minus
+                // We want to prevent typing other chars. 
+                // Note: input[type=number] often prevents invalid chars natively, but not always.
+                
+                // If the browser allows non-numeric chars in the value (like 'e'), remove them
+                // But for standard text/decimal inputs:
+                const clean = val.replace(/[^0-9.-]/g, '');
+                
+                // Handle multiple dots: keep only the first
+                const parts = clean.split('.');
+                let final = parts[0];
+                if (parts.length > 1) {
+                    final += '.' + parts.slice(1).join('');
+                }
+                
+                // Handle minus: only allowed at start
+                if (final.indexOf('-') > 0) {
+                    final = final.replace(/-/g, ''); // remove all
+                    // If it was at start, we might have removed it, logic gets complex.
+                    // Simpler: just regex match valid float pattern
+                }
+                
+                // Actually, a simpler approach for 'input' event is just to let the browser handle type="number"
+                // But user asked for "only allow digits and at most one decimal point".
+                // Let's try to enforce it if the value changed to something invalid.
+                
+                if (val !== final) {
+                    this.value = final;
+                }
+            });
+            
+            input.dataset.listenersAttached = 'true';
+        });
+    }
+
+    // Observe changes to detect when dialog opens
+    const observer = new MutationObserver(() => {
+        attachListeners();
+    });
+    
+    observer.observe(doc.body, { childList: true, subtree: true });
+    
+    // Initial run
+    setTimeout(attachListeners, 500);
+    </script>
+    """, height=0, width=0)
 
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)

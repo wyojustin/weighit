@@ -31,7 +31,7 @@ def set_defaults_if_needed():
     global DB_PATH, SCHEMA_PATH
 
     if DB_PATH is None:
-        DB_PATH = os.path.expanduser("~/weighit/weigh.db")
+        DB_PATH = os.environ.get("WEIGHIT_DB_PATH", os.path.expanduser("~/weighit/weigh.db"))
 
     if SCHEMA_PATH is None:
         here = os.path.dirname(__file__)

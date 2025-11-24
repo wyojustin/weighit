@@ -104,6 +104,9 @@ pip install -e .
 streamlit run src/weigh/app.py
 ```
 
+### Configuration
+- `WEIGHIT_DB_PATH`: Set this environment variable to override the default database location (`~/weighit/weigh.db`).
+
 ### Running Tests
 ```bash
 # All tests
