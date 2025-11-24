@@ -238,9 +238,17 @@ def temperature_dialog():
         inputs.forEach(input => {
             if (input.dataset.listenersAttached) return;
             
-            // 1. Select All on Focus
-            input.addEventListener('focus', function() {
-                this.select();
+            // 1. Select All on Focus (without triggering context menu on touch)
+            input.addEventListener('focus', function(e) {
+                // Use setSelectionRange to avoid triggering selection handles
+                setTimeout(() => {
+                    this.setSelectionRange(0, this.value.length);
+                }, 0);
+            });
+            
+            // Prevent context menu from appearing
+            input.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
             });
             
             // 2. Strict Input Validation (Digits, one dot, one minus at start)
