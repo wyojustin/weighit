@@ -73,10 +73,13 @@ class DymoHIDScale:
             rep = bytes(data)
             reading = self._parse_report(rep)
             if reading:
-                # Uncomment this for low-level debug:
-                # print(f"RAW: {rep!r} -> {reading.value:.2f} {reading.unit}")
+                # Debug: show raw data and parsed result
+                print(f"RAW: {rep!r} -> {reading.value:.2f} {reading.unit} stable={reading.is_stable}")
                 with self._lock:
                     self._latest = reading
+            else:
+                # Debug: show unparsed data
+                print(f"UNPARSED: {rep!r}")
 
     def _parse_report(self, rep: bytes) -> Optional[ScaleReading]:
         """
