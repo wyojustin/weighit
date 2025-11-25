@@ -1,0 +1,9 @@
+# udev rule for USB scale access
+# This allows non-root users to access the USB scale device
+# Vendor ID: 0x1018, Product ID: 0x1006
+
+# USB subsystem rule
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1018", ATTRS{idProduct}=="1006", MODE="0666"
+
+# HID raw device rule
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1018", ATTRS{idProduct}=="1006", MODE="0666"
