@@ -11,8 +11,8 @@ import hid  # from hidapi
 
 logger = logging.getLogger(__name__)
 
-VENDOR_ID = 0x1018   # Generic USB scale
-PRODUCT_ID = 0x1006  # Actual scale detected on system
+VENDOR_ID = 0x0922   # Dymo
+PRODUCT_ID = 0x8009  # S250 Digital Postal Scale
 
 
 @dataclass
