@@ -27,9 +27,9 @@
   - This happens occasionally and is normal
 
 ### 6. Select Donor Source
-- **Open the admin bar** by clicking **>>** in the upper left
-- **Select the donor source** from the dropdown menu
-- **Close the admin bar** by clicking **>>** again
+- The **donor dropdown** is located at the top center of the screen, **above the weight display**
+- **Click the dropdown** and select the current donor source (e.g., "Trader Joe's", "Whole Foods")
+- This will apply to all items you log during this session
 
 ---
 
@@ -107,10 +107,36 @@
 | Problem | Solution |
 |---------|----------|
 | Scale shows **------** | Press **F5** to reload the app |
+| Scale shows **Err** | Check that scale is plugged in via USB (not on batteries), then press **F5** |
 | Weight won't stabilize | Make sure the scale is on a flat, stable surface |
 | App is frozen | Press **F5** to reload, or restart the app |
 | Wrong donation type logged | Use the **Undo** button (Ctrl+Z) |
 | Scale not detected | Unplug and replug the USB cable, then press **F5** |
+
+### If Nothing Works
+
+If you've tried the troubleshooting steps above and the WeighIt app still isn't working:
+
+1. **Don't panic!** This is technology, and sometimes it happens.
+
+2. **Apologize to the donor** and let them know:
+   - "I'm sorry, our digital scale system is having technical difficulties right now."
+   - "We're still happy to accept your donation! We'll just record it the old-fashioned way."
+
+3. **Fall back to manual recording:**
+   - **Grab a pen and paper** (or notebook)
+   - **Weigh each item** on the scale (the scale itself still works—it's just the computer connection that's having issues)
+   - **Write down**:
+     - Donor name/source (e.g., "Trader Joe's")
+     - Food type (Produce, Dairy, Meat, etc.)
+     - Weight in pounds
+     - Current date and time
+   
+4. **After your shift:**
+   - Contact the coordinator and let them know the system had issues
+   - Provide your handwritten notes so the data can be entered later
+
+**Remember**: The most important thing is accepting and tracking the donations. The app makes it easier, but pen and paper works too!
 
 ---
 
