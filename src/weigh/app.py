@@ -330,16 +330,9 @@ with st.sidebar:
     st.header("Admin")
     sources = get_sources()
     
+    # Initialize source if not set (will be displayed on main screen)
     if "source" not in st.session_state:
         st.session_state.source = sources[0] if sources else "Unknown"
-    
-    current_idx = 0
-    if st.session_state.source in sources:
-        current_idx = sources.index(st.session_state.source)
-        
-    st.session_state.source = st.selectbox("Source", sources, index=current_idx)
-    
-    st.divider()
     
     # --- Undo / Redo ---
     c_undo, c_redo = st.columns(2)
