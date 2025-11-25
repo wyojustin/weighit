@@ -20,21 +20,24 @@ def get_logs_between(start_date: str, end_date: str):
 
 def get_recent_entries(limit: int = 5, source: Optional[str] = None):
     conn = get_conn()
+    today = datetime.now(UTC).date().isoformat()
     
     if source:
-        # Filter by source
+        # Filter by source AND today
         rows = conn.execute("""
             SELECT l.timestamp, l.weight_lb, s.name as source, t.name as type,
                    l.temp_pickup_f, l.temp_dropoff_f
             FROM logs l
             JOIN sources s ON l.source_id = s.id
             JOIN types t   ON l.type_id = t.id
-            WHERE l.deleted = 0 AND s.name = ?
+            WHERE l.deleted = 0 
+              AND s.name = ?
+              AND DATE(l.timestamp) = ?
             ORDER BY l.id DESC
             LIMIT ?
-        """, (source, limit)).fetchall()
+        """, (source, today, limit)).fetchall()
     else:
-        # Show all sources
+        # Show all sources for today
         rows = conn.execute("""
             SELECT l.timestamp, l.weight_lb, s.name as source, t.name as type,
                    l.temp_pickup_f, l.temp_dropoff_f
@@ -42,9 +45,10 @@ def get_recent_entries(limit: int = 5, source: Optional[str] = None):
             JOIN sources s ON l.source_id = s.id
             JOIN types t   ON l.type_id = t.id
             WHERE l.deleted = 0
+              AND DATE(l.timestamp) = ?
             ORDER BY l.id DESC
             LIMIT ?
-        """, (limit,)).fetchall()
+        """, (today, limit)).fetchall()
     
     return [dict(r) for r in rows]
 
