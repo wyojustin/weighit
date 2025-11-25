@@ -238,17 +238,22 @@ def temperature_dialog():
         inputs.forEach(input => {
             if (input.dataset.listenersAttached) return;
             
-            // 1. Select All on Focus (without triggering context menu on touch)
+            // Helper to select text
+            const selectText = () => {
+                input.select();
+            };
+            
+            // 1. Select All on Focus
             input.addEventListener('focus', function(e) {
-                // Use setSelectionRange to avoid triggering selection handles
-                setTimeout(() => {
-                    this.setSelectionRange(0, this.value.length);
-                }, 0);
+                // Small timeout to ensure browser default behavior doesn't override us
+                setTimeout(selectText, 50);
             });
             
-            // Prevent context menu from appearing
-            input.addEventListener('contextmenu', function(e) {
+            // Handle click/touch specifically (fixes selection clearing on mobile)
+            input.addEventListener('mouseup', function(e) {
+                // Prevent default to stop browser from clearing selection
                 e.preventDefault();
+                setTimeout(selectText, 50);
             });
             
             // 2. Strict Input Validation (Digits, one dot, one minus at start)
@@ -256,11 +261,6 @@ def temperature_dialog():
                 let val = this.value;
                 
                 // Allow: digits, dot, minus
-                // We want to prevent typing other chars. 
-                // Note: input[type=number] often prevents invalid chars natively, but not always.
-                
-                // If the browser allows non-numeric chars in the value (like 'e'), remove them
-                // But for standard text/decimal inputs:
                 const clean = val.replace(/[^0-9.-]/g, '');
                 
                 // Handle multiple dots: keep only the first
@@ -272,14 +272,8 @@ def temperature_dialog():
                 
                 // Handle minus: only allowed at start
                 if (final.indexOf('-') > 0) {
-                    final = final.replace(/-/g, ''); // remove all
-                    // If it was at start, we might have removed it, logic gets complex.
-                    // Simpler: just regex match valid float pattern
+                    final = final.replace(/-/g, '');
                 }
-                
-                // Actually, a simpler approach for 'input' event is just to let the browser handle type="number"
-                // But user asked for "only allow digits and at most one decimal point".
-                // Let's try to enforce it if the value changed to something invalid.
                 
                 if (val !== final) {
                     this.value = final;
