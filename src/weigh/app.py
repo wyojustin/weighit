@@ -437,9 +437,14 @@ try:
                 break
                 
     weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
-except Exception:
+except Exception as e:
     scale = None
     weight_str = "Err"
+    # Log the error for debugging
+    logging.error(f"Scale error: {type(e).__name__}: {e}")
+    # Show error in sidebar for debugging
+    with st.sidebar:
+        st.error(f"Scale Error: {type(e).__name__}: {str(e)}")
 
 # 2. Top Row: Logo | Weight | Logo
 c1, c2, c3 = st.columns([1, 5, 1], gap="small", vertical_alignment="center")
