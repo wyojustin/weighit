@@ -445,7 +445,7 @@ except Exception:
 c1, c2, c3 = st.columns([1, 5, 1], gap="small", vertical_alignment="center")
 
 with c1:
-    img = load_logo(PANTRY_LOGO, height_px=110)
+    img = load_logo(PANTRY_LOGO, height_px=138)
     if img: st.image(img)
 
 with c2:
@@ -453,7 +453,7 @@ with c2:
     weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
 
 with c3:
-    img = load_logo(SCALE_LOGO, height_px=110)
+    img = load_logo(SCALE_LOGO, height_px=138)
     if img:
         # Hidden button for refresh
         if st.button("refresh_hidden", key="refresh_scale", help="Click scale to refresh"):
