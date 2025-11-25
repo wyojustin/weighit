@@ -152,6 +152,28 @@ def safe_rerun():
     if hasattr(st, "rerun"):
         st.rerun()
 
+@st.dialog("Select Current Donor")
+def donor_selection_dialog():
+    """Modal dialog for selecting current donor on startup"""
+    st.write("Please select the current donor (source) for this session:")
+    
+    sources = get_sources()
+    
+    # Default to first source if available
+    selected_source = st.selectbox(
+        "Current Donor",
+        sources,
+        index=0 if sources else None,
+        key="donor_selection_input"
+    )
+    
+    st.divider()
+    
+    if st.button("Confirm", type="primary", use_container_width=True, key="confirm_donor"):
+        st.session_state.source = selected_source
+        st.session_state.donor_selected = True
+        st.rerun()
+
 @st.dialog("Temperature Recording")
 def temperature_dialog():
     """Modal dialog for recording temperatures"""
@@ -421,6 +443,12 @@ if "pending_entry" not in st.session_state:
     st.session_state.pending_entry = None
 if "dialog_processed" not in st.session_state:
     st.session_state.dialog_processed = False
+if "donor_selected" not in st.session_state:
+    st.session_state.donor_selected = False
+
+# Show donor selection dialog on startup
+if not st.session_state.donor_selected:
+    donor_selection_dialog()
 
 # ---------------- MAIN UI ----------------
 
@@ -449,6 +477,10 @@ with c1:
     if img: st.image(img)
 
 with c2:
+    # Display current donor above weight
+    current_donor = st.session_state.get("source", "Unknown")
+    st.markdown(f'<div style="text-align: center; font-size: 14px; color: #666; margin-bottom: 5px;">Current Donor: {current_donor}</div>', unsafe_allow_html=True)
+    
     weight_ph = st.empty()
     weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
 
