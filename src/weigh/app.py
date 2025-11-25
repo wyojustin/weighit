@@ -477,9 +477,19 @@ with c1:
     if img: st.image(img)
 
 with c2:
-    # Display current donor above weight
-    current_donor = st.session_state.get("source", "Unknown")
-    st.markdown(f'<div style="text-align: center; font-size: 14px; color: #666; margin-bottom: 5px;">Current Donor: {current_donor}</div>', unsafe_allow_html=True)
+    # Compact donor dropdown above weight
+    sources = get_sources()
+    current_idx = 0
+    if st.session_state.source in sources:
+        current_idx = sources.index(st.session_state.source)
+    
+    st.session_state.source = st.selectbox(
+        "Current Donor",
+        sources,
+        index=current_idx,
+        key="donor_select_main",
+        label_visibility="collapsed"
+    )
     
     weight_ph = st.empty()
     weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
