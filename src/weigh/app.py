@@ -427,7 +427,15 @@ if "dialog_processed" not in st.session_state:
 # 1. Get Weight
 try:
     scale = get_scale()
+    # Retry a few times if we just started up and haven't got a reading yet
     reading = scale.get_latest()
+    if reading is None:
+        for _ in range(10):
+            time.sleep(0.1)
+            reading = scale.get_latest()
+            if reading:
+                break
+                
     weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
 except Exception:
     scale = None
