@@ -47,3 +47,20 @@ python -c "import hid; print([d for d in hid.enumerate() if d['vendor_id'] == 0x
 ```
 
 Should show device info without errors.
+
+## Troubleshooting
+
+### Scale Not Detected in lsusb
+
+**Problem**: Running `lsusb` doesn't show the Dymo scale (ID 0922:8009).
+
+**Solution**: The Dymo S250 scale **must be powered via USB**, not batteries. If the scale is running on battery power, it will not enumerate on the USB bus.
+
+1. Remove batteries from the scale
+2. Connect the USB cable
+3. Run `lsusb` again - you should now see:
+   ```
+   Bus XXX Device XXX: ID 0922:8009 Dymo-CoStar Corp. S250 Digital Postal Scale
+   ```
+
+**Note**: Some USB cables are power-only (no data). If the scale still doesn't appear after removing batteries, try a different USB cable.

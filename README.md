@@ -243,6 +243,25 @@ It should work on any Linux system with a compatible USB scale.
 
 ### Scale Not Detected
 
+**First, check if the scale appears in lsusb:**
+```bash
+lsusb | grep -i dymo
+```
+
+**If not found**: The Dymo S250 scale **must be powered via USB**, not batteries. If the scale is running on battery power, it will not enumerate on the USB bus.
+
+**Solution:**
+1. Remove batteries from the scale
+2. Connect the USB cable to provide power
+3. Run `lsusb` again - you should see:
+   ```
+   Bus XXX Device XXX: ID 0922:8009 Dymo-CoStar Corp. S250 Digital Postal Scale
+   ```
+
+**Note**: Some USB cables are power-only (no data). If the scale still doesn't appear after removing batteries, try a different USB cable.
+
+**If found but getting "Err" in the app**: Check USB permissions.
+
 Check USB permissions:
 ```bash
 lsusb | grep -i dymo
