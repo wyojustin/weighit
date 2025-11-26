@@ -15,3 +15,6 @@ weigh = ["assets/*.png", "schema.sql"]
 
 [project.scripts]
 weigh = "weigh.cli_weigh:main"
+
+[tool.pytest.ini_options]
+pythonpath = "src"
