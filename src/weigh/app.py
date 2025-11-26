@@ -152,6 +152,22 @@ def safe_rerun():
     if hasattr(st, "rerun"):
         st.rerun()
 
+@st.dialog("Volunteer Cheat Sheet", width="large")
+def cheatsheet_dialog():
+    """Modal dialog for displaying the volunteer cheat sheet"""
+    cheatsheet_path = Path(__file__).parent.parent.parent / "docs" / "volunteer_cheatsheet.md"
+    
+    if cheatsheet_path.exists():
+        with open(cheatsheet_path, "r") as f:
+            markdown_content = f.read()
+            st.markdown(markdown_content)
+    else:
+        st.error("Cheat sheet not found!")
+    
+    if st.button("Close", type="primary", use_container_width=True):
+        st.rerun()
+
+
 @st.dialog("Temperature Recording")
 def temperature_dialog():
     """Modal dialog for recording temperatures"""
@@ -348,11 +364,9 @@ with st.sidebar:
     st.divider()
     
     # --- VOLUNTEER CHEAT SHEET ---
-    cheatsheet_path = Path(__file__).parent.parent.parent / "docs" / "volunteer_cheatsheet.md"
-    if cheatsheet_path.exists():
-        if st.button("📋 View Volunteer Cheat Sheet", use_container_width=True):
-            # Open cheat sheet in new Chromium window
-            os.system(f"chromium {cheatsheet_path.absolute()} &")
+    if st.button("📋 View Volunteer Cheat Sheet", use_container_width=True):
+        st.session_state.show_cheatsheet = True
+        st.rerun()
     
     st.divider()
     
@@ -423,6 +437,8 @@ if "pending_entry" not in st.session_state:
     st.session_state.pending_entry = None
 if "dialog_processed" not in st.session_state:
     st.session_state.dialog_processed = False
+if "show_cheatsheet" not in st.session_state:
+    st.session_state.show_cheatsheet = False
 
 # ---------------- MAIN UI ----------------
 
@@ -553,6 +569,11 @@ for i, row in enumerate(rows):
 # Show temperature dialog if needed
 if st.session_state.get("show_temp_dialog", False):
     temperature_dialog()
+
+# Show cheat sheet dialog if requested
+if st.session_state.get("show_cheatsheet", False):
+    st.session_state.show_cheatsheet = False
+    cheatsheet_dialog()
 
 # 4. Daily Totals
 totals_ph = st.empty()
