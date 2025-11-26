@@ -160,7 +160,30 @@ def cheatsheet_dialog():
     if cheatsheet_path.exists():
         with open(cheatsheet_path, "r") as f:
             markdown_content = f.read()
-            st.markdown(markdown_content)
+            
+            # Split content into sections by major headers (##)
+            sections = markdown_content.split('\n## ')
+            
+            # First section includes the title
+            left_sections = [sections[0]]
+            right_sections = []
+            
+            # Distribute remaining sections into two columns
+            # Put first half in left, second half in right
+            remaining = ['## ' + s for s in sections[1:]]
+            mid_point = len(remaining) // 2
+            
+            left_sections.extend(remaining[:mid_point])
+            right_sections.extend(remaining[mid_point:])
+            
+            # Display in two columns
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown('\n'.join(left_sections))
+            
+            with col2:
+                st.markdown('\n'.join(right_sections))
     else:
         st.error("Cheat sheet not found!")
     
