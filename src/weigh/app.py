@@ -187,6 +187,20 @@ def cheatsheet_dialog():
     else:
         st.error("Cheat sheet not found!")
     
+    # Scroll to top of dialog
+    components.html("""
+    <script>
+    const doc = window.parent.document;
+    // Find the dialog and scroll to top
+    setTimeout(() => {
+        const dialogs = doc.querySelectorAll('[role="dialog"]');
+        if (dialogs.length > 0) {
+            dialogs[dialogs.length - 1].scrollTop = 0;
+        }
+    }, 100);
+    </script>
+    """, height=0, width=0)
+    
     if st.button("Close", type="primary", use_container_width=True):
         st.rerun()
 
