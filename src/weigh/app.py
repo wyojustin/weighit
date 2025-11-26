@@ -350,14 +350,9 @@ with st.sidebar:
     # --- VOLUNTEER CHEAT SHEET ---
     cheatsheet_path = Path(__file__).parent.parent.parent / "docs" / "volunteer_cheatsheet.md"
     if cheatsheet_path.exists():
-        with open(cheatsheet_path, "rb") as f:
-            st.download_button(
-                label="📋 Download Volunteer Cheat Sheet",
-                data=f.read(),
-                file_name="volunteer_cheatsheet.md",
-                mime="text/markdown",
-                use_container_width=True
-            )
+        if st.button("📋 View Volunteer Cheat Sheet", use_container_width=True):
+            # Open cheat sheet in new Chromium window
+            os.system(f"chromium {cheatsheet_path.absolute()} &")
     
     st.divider()
     
