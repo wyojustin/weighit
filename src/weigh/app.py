@@ -347,6 +347,20 @@ with st.sidebar:
 
     st.divider()
     
+    # --- VOLUNTEER CHEAT SHEET ---
+    cheatsheet_path = Path(__file__).parent.parent.parent / "docs" / "volunteer_cheatsheet.md"
+    if cheatsheet_path.exists():
+        with open(cheatsheet_path, "rb") as f:
+            st.download_button(
+                label="📋 Download Volunteer Cheat Sheet",
+                data=f.read(),
+                file_name="volunteer_cheatsheet.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+    
+    st.divider()
+    
     # --- REPORTING SECTION ---
     st.subheader("Send Report")
     
