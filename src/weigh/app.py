@@ -192,12 +192,29 @@ def cheatsheet_dialog():
     <script>
     const doc = window.parent.document;
     // Find the dialog and scroll to top
-    setTimeout(() => {
+    function scrollToTop() {
         const dialogs = doc.querySelectorAll('[role="dialog"]');
         if (dialogs.length > 0) {
-            dialogs[dialogs.length - 1].scrollTop = 0;
+            const dialog = dialogs[dialogs.length - 1];
+            dialog.scrollTop = 0;
+            
+            // Also scroll any scrollable children
+            const scrollableContent = dialog.querySelector('[data-testid="stVerticalBlock"]');
+            if (scrollableContent) {
+                scrollableContent.scrollTop = 0;
+            }
+            
+            // Scroll the dialog's first child (the content container)
+            if (dialog.firstElementChild) {
+                dialog.firstElementChild.scrollTop = 0;
+            }
         }
-    }, 100);
+    }
+    
+    // Try multiple times to ensure it works
+    setTimeout(scrollToTop, 50);
+    setTimeout(scrollToTop, 200);
+    setTimeout(scrollToTop, 500);
     </script>
     """, height=0, width=0)
     
