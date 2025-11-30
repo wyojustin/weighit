@@ -1,7 +1,48 @@
 #!/bin/bash
 
+# Parse command line arguments for browser selection
+BROWSER="firefox"  # Default to firefox to avoid chromium library issues
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --browser|-b)
+            BROWSER="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--browser BROWSER]"
+            echo ""
+            echo "Options:"
+            echo "  --browser, -b    Browser to use (firefox, epiphany, chromium)"
+            echo "  --help, -h       Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0 --browser firefox"
+            echo "  $0 --browser epiphany"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate browser choice
+case $BROWSER in
+    firefox|epiphany|chromium)
+        # Valid browser
+        ;;
+    *)
+        echo "Error: Unsupported browser '$BROWSER'"
+        echo "Supported browsers: firefox, epiphany, chromium"
+        exit 1
+        ;;
+esac
+
 # Show a notification that we're starting
-notify-send "WeighIt" "Starting Food Pantry Scale...(10 seconds)" -t 10000 -i /home/alarm/weighit/src/weigh/assets/scale_icon.png
+notify-send "WeighIt" "Starting Food Pantry Scale...(10 seconds) with $BROWSER" -t 10000 -i /home/alarm/weighit/src/weigh/assets/scale_icon.png
 
 set -e
 
@@ -25,13 +66,24 @@ streamlit run src/weigh/app.py \
 # Wait for Streamlit to be ready (you can adjust this timing)
 sleep 3
 
-# Launch Chromium with performance flags
-/usr/bin/chromium --kiosk --app=http://localhost:8501 \
-  --disable-gpu \
-  --disable-software-rasterizer \
-  --disable-dev-shm-usage \
-  --disable-extensions \
-  --disable-sync \
-  --no-first-run \
-  --fast \
-  --fast-start
+# Launch browser based on selection
+case $BROWSER in
+    firefox)
+        firefox --kiosk http://localhost:8501 &
+        ;;
+    epiphany)
+        epiphany --application-mode http://localhost:8501 &
+        ;;
+    chromium)
+        /usr/bin/chromium --kiosk --app=http://localhost:8501 \
+          --disable-gpu \
+          --disable-software-rasterizer \
+          --disable-dev-shm-usage \
+          --disable-extensions \
+          --disable-sync \
+          --no-first-run \
+          --fast \
+          --fast-start &
+        ;;
+esac
+
