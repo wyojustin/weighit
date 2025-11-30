@@ -51,9 +51,10 @@
   - **Non-food** (toiletries, household items)
 - **Handle Temperature Recording (if applicable)**:
   - If the donation type is **Dairy**, **Meat**, or **Prepared**, you will be prompted for temperatures
-  - Enter the **pickup temperature**
-  - Enter the **dropoff temperature**
-  - Click **"Save Entry"** to confirm the temperatures, or **Cancel** to go back
+  - The **pickup temperature** field will be auto-selected—just start typing to replace it
+  - Tab to the **dropoff temperature** field and enter the temperature
+  - Press **Enter** or click **"Save Entry"** to confirm the temperatures
+  - Or click **Cancel** to go back
 - **Confirm what you saw**: The large weight displayed at the center top should match what you saw on the scale
   - If it doesn't match, use **Admin >> Undo** or press **Ctrl+Z** to remove the last reading
 
@@ -81,7 +82,7 @@
 ## End of Shift
 
 ### 10. Send the Report
-- **Open the admin bar** by clicking **>>** in the upper left
+- **Open the admin bar** by clicking **>>** in the upper left (or press **F2**)
 - Scroll down to the **"Send Report"** section
 - **Select the date range**:
   - **Start Date**: Defaults to today (change if needed)
@@ -89,13 +90,13 @@
 - **Enter the Recipient Email**: Type the coordinator's email address
 - Click the **"Email CSV"** button
 - Wait for the confirmation message: **"Email Sent!"**
-- **Close the admin bar** by clicking **>>** again
+- **Close the admin bar** by clicking **>>** again (or press **F2**)
 
 ### 11. Power Down
 - **Close the WeighIt App**:
-  - **Open the admin bar** by clicking **>>** in the upper left
+  - **Open the admin bar** by clicking **>>** in the upper left (or press **F2**)
   - Scroll down to the bottom
-  - Click the **"Close Application"** button
+  - Click the **"Close Application"** button (or press **Alt+F4**)
 - **Turn off the scale** (press and hold the power button)
 - **Shut down the PineTab2** (use the system menu)
 - Unplug the scale and store it safely
@@ -142,8 +143,11 @@ If you've tried the troubleshooting steps above and the WeighIt app still isn't 
 
 ## Quick Reference: Keyboard Shortcuts
 
+- **F1**: View this cheat sheet
+- **F2**: Toggle admin panel (open/close)
 - **F5**: Reload the app
 - **Ctrl+Z**: Undo last entry
-- **Ctrl+Y**: Redo
-- **Ctrl+R**: Generate report (admin only)
+- **Ctrl+Y**: Redo last undo
+- **Alt+F4**: Close the application
+- **Enter** (in temp dialog): Save temperature entry
 
