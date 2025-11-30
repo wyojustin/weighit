@@ -420,51 +420,91 @@ components.html("""
 <script>
 const doc = window.parent.document;
 
-// Function to find and toggle sidebar
+// Function to find and toggle sidebar - more aggressive approach
 function toggleSidebar() {
-    // Try multiple selectors for sidebar toggle button
-    let sidebarToggle = doc.querySelector('[data-testid="collapsedControl"]');
+    console.log('[WeighIt] Attempting to toggle sidebar...');
 
-    if (!sidebarToggle) {
-        // Try alternative selectors
-        sidebarToggle = doc.querySelector('button[kind="header"]');
-    }
-
-    if (!sidebarToggle) {
-        // Look for button with chevron icon (>>)
-        const buttons = Array.from(doc.querySelectorAll('button'));
-        sidebarToggle = buttons.find(btn => {
-            const svg = btn.querySelector('svg');
-            return svg && (btn.getAttribute('aria-label') === 'Open sidebar' ||
-                          btn.getAttribute('aria-label') === 'Close sidebar');
-        });
-    }
-
-    if (sidebarToggle) {
-        sidebarToggle.click();
+    // Strategy 1: Find button by data-testid
+    let toggle = doc.querySelector('[data-testid="collapsedControl"]');
+    if (toggle) {
+        console.log('[WeighIt] Found toggle via collapsedControl');
+        toggle.click();
         return true;
     }
+
+    // Strategy 2: Find button by class (Streamlit uses specific classes)
+    toggle = doc.querySelector('button[class*="collapsedControl"]');
+    if (toggle) {
+        console.log('[WeighIt] Found toggle via class');
+        toggle.click();
+        return true;
+    }
+
+    // Strategy 3: Find the first button in the header area (before main content)
+    const header = doc.querySelector('header');
+    if (header) {
+        toggle = header.querySelector('button');
+        if (toggle) {
+            console.log('[WeighIt] Found toggle in header');
+            toggle.click();
+            return true;
+        }
+    }
+
+    // Strategy 4: Find button by looking at position (sidebar toggle is usually top-left)
+    const allButtons = Array.from(doc.querySelectorAll('button'));
+    toggle = allButtons.find(btn => {
+        const rect = btn.getBoundingClientRect();
+        // Top-left button, small size, not in sidebar itself
+        return rect.top < 100 && rect.left < 100 && !btn.closest('[data-testid="stSidebar"]');
+    });
+    if (toggle) {
+        console.log('[WeighIt] Found toggle by position');
+        toggle.click();
+        return true;
+    }
+
+    console.log('[WeighIt] Could not find sidebar toggle button');
     return false;
+}
+
+// Function to check if sidebar is currently visible
+function isSidebarVisible() {
+    const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+    if (!sidebar) return false;
+
+    // Check computed style
+    const style = window.getComputedStyle(sidebar);
+    const transform = style.transform;
+
+    // Sidebar is visible if it's not translated off-screen
+    // When collapsed, it typically has translateX(-100%) or similar
+    if (transform && transform !== 'none') {
+        const matrix = new DOMMatrix(transform);
+        // If translateX is close to 0, sidebar is visible
+        return Math.abs(matrix.m41) < 50;
+    }
+
+    // Check width as fallback
+    return sidebar.offsetWidth > 50;
 }
 
 // Function to ensure sidebar is closed
 function ensureSidebarClosed() {
-    const sidebar = doc.querySelector('[data-testid="stSidebar"]');
-    if (sidebar) {
-        // Check if sidebar is visible/expanded
-        const isExpanded = sidebar.getAttribute('aria-expanded') === 'true' ||
-                          !sidebar.hasAttribute('aria-expanded');
-
-        if (isExpanded) {
-            toggleSidebar();
-        }
+    console.log('[WeighIt] Checking sidebar state...');
+    if (isSidebarVisible()) {
+        console.log('[WeighIt] Sidebar is visible, closing it...');
+        toggleSidebar();
+    } else {
+        console.log('[WeighIt] Sidebar is already closed');
     }
 }
 
-// Force sidebar closed on startup
-setTimeout(() => ensureSidebarClosed(), 100);
-setTimeout(() => ensureSidebarClosed(), 500);
-setTimeout(() => ensureSidebarClosed(), 1000);
+// Force sidebar closed on startup with multiple retries
+setTimeout(() => ensureSidebarClosed(), 200);
+setTimeout(() => ensureSidebarClosed(), 600);
+setTimeout(() => ensureSidebarClosed(), 1200);
+setTimeout(() => ensureSidebarClosed(), 2000);
 
 // Keyboard event listeners
 doc.addEventListener('keydown', function(e) {
@@ -496,7 +536,11 @@ doc.addEventListener('keydown', function(e) {
     // F2 = Toggle Admin Pane (sidebar)
     if (e.key === 'F2') {
         e.preventDefault();  // Prevent default browser behavior
-        toggleSidebar();
+        console.log('[WeighIt] F2 pressed, toggling sidebar...');
+        const result = toggleSidebar();
+        if (!result) {
+            console.log('[WeighIt] F2 toggle failed - button not found');
+        }
     }
     // Alt+F4 = Close Application
     if (e.altKey && e.key === 'F4') {
