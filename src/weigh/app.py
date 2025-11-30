@@ -508,6 +508,11 @@ setTimeout(() => ensureSidebarClosed(), 2000);
 
 // Keyboard event listeners
 doc.addEventListener('keydown', function(e) {
+    // Debug: Log ALL F-key presses
+    if (e.key && e.key.startsWith('F')) {
+        console.log('[WeighIt] F-key detected:', e.key, 'keyCode:', e.keyCode);
+    }
+
     // Ctrl+Z = Undo
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
         const buttons = Array.from(doc.querySelectorAll('button'));
@@ -534,7 +539,7 @@ doc.addEventListener('keydown', function(e) {
         }
     }
     // F2 = Toggle Admin Pane (sidebar)
-    if (e.key === 'F2') {
+    if (e.key === 'F2' || e.keyCode === 113) {
         e.preventDefault();  // Prevent default browser behavior
         console.log('[WeighIt] F2 pressed, toggling sidebar...');
         const result = toggleSidebar();
