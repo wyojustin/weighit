@@ -148,6 +148,29 @@ def chunk_types(types: List[dict]) -> List[List[dict]]:
     mid = (len(types) + 1) // 2
     return [types[:mid], types[mid:]]
 
+@st.fragment(run_every="1s")
+def display_weight():
+    """Auto-updating weight display that refreshes every second independently"""
+    try:
+        scale = get_scale()
+        reading = scale.get_latest()
+
+        # Retry a few times if no reading yet
+        if reading is None:
+            for _ in range(3):
+                time.sleep(0.1)
+                reading = scale.get_latest()
+                if reading:
+                    break
+
+        weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
+    except Exception as e:
+        weight_str = "Err"
+        logging.error(f"Scale error in fragment: {type(e).__name__}: {e}")
+
+    # This markdown will update every second without redrawing the whole app
+    st.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
+
 def safe_rerun():
     if hasattr(st, "rerun"):
         st.rerun()
@@ -542,7 +565,9 @@ with c2:
         label_visibility="collapsed"
     )
     
-    weight_ph = st.empty()
+    #weight_ph = st.empty()
+    display_weight()
+    
     weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
 
 with c3:
@@ -592,6 +617,7 @@ rows = chunk_types(types)
 
 def on_log(type_info):
     """Handle button click - check if temperature is required"""
+    scale = get_scale()
     r = scale.read_stable_weight(timeout_s=0.5) if scale else None
     if r and r.unit == "lb":
         if r.value > 0.0:
