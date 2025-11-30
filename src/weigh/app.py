@@ -420,7 +420,7 @@ components.html("""
 <script>
 const doc = window.parent.document;
 
-// Function to find and toggle sidebar - more aggressive approach
+// Function to find and toggle sidebar - more specific approach
 function toggleSidebar() {
     console.log('[WeighIt] Attempting to toggle sidebar...');
 
@@ -440,31 +440,56 @@ function toggleSidebar() {
         return true;
     }
 
-    // Strategy 3: Find the first button in the header area (before main content)
+    // Strategy 3: Find button with chevron/arrow SVG icon
+    // Look for buttons with SVG paths that might be chevrons
+    const allButtons = Array.from(doc.querySelectorAll('button'));
+    toggle = allButtons.find(btn => {
+        const svg = btn.querySelector('svg');
+        if (!svg) return false;
+
+        // Must NOT be inside the sidebar
+        if (btn.closest('[data-testid="stSidebar"]')) return false;
+
+        // Check if button is in the app header/toolbar area
+        const rect = btn.getBoundingClientRect();
+        if (rect.top > 200) return false;  // Not in header area
+
+        // Additional check: button should be relatively small (icon button)
+        if (rect.width > 100 || rect.height > 100) return false;
+
+        return true;
+    });
+
+    if (toggle) {
+        console.log('[WeighIt] Found toggle via SVG icon in header');
+        toggle.click();
+        return true;
+    }
+
+    // Strategy 4: Find the first small button in the header that's NOT the refresh button
     const header = doc.querySelector('header');
     if (header) {
-        toggle = header.querySelector('button');
+        const headerButtons = Array.from(header.querySelectorAll('button'));
+        toggle = headerButtons.find(btn => {
+            // Skip hidden buttons (like refresh_hidden)
+            if (btn.style.display === 'none') return false;
+            if (btn.innerText.includes('refresh_hidden')) return false;
+
+            // Must have SVG (icon button)
+            const svg = btn.querySelector('svg');
+            return svg !== null;
+        });
+
         if (toggle) {
-            console.log('[WeighIt] Found toggle in header');
+            console.log('[WeighIt] Found toggle in header (first icon button)');
             toggle.click();
             return true;
         }
     }
 
-    // Strategy 4: Find button by looking at position (sidebar toggle is usually top-left)
-    const allButtons = Array.from(doc.querySelectorAll('button'));
-    toggle = allButtons.find(btn => {
-        const rect = btn.getBoundingClientRect();
-        // Top-left button, small size, not in sidebar itself
-        return rect.top < 100 && rect.left < 100 && !btn.closest('[data-testid="stSidebar"]');
-    });
-    if (toggle) {
-        console.log('[WeighIt] Found toggle by position');
-        toggle.click();
-        return true;
-    }
-
     console.log('[WeighIt] Could not find sidebar toggle button');
+    console.log('[WeighIt] Available buttons in header:',
+        header ? Array.from(header.querySelectorAll('button')).map(b => b.className).join(', ') : 'no header');
     return false;
 }
 
