@@ -478,8 +478,10 @@ with st.sidebar:
     # --- CLOSE APPLICATION ---
     if st.button("Close Application", type="secondary", use_container_width=True):
         st.warning("Shutting down...")
-        # Kill chromium and streamlit
+        # Kill all browsers and streamlit
         os.system("pkill -f chromium")
+        os.system("pkill -f firefox")
+        os.system("pkill -f epiphany")
         os.kill(os.getpid(), signal.SIGTERM)
 
 # Session State Defaults
