@@ -420,98 +420,107 @@ components.html("""
 <script>
 const doc = window.parent.document;
 
-// Function to find and toggle sidebar - more specific approach
+// Function to find and toggle sidebar - ultra-specific approach
 function toggleSidebar() {
-    console.log('[WeighIt] Attempting to toggle sidebar...');
+    console.log('[WeighIt] === Attempting to toggle sidebar ===');
 
-    // Strategy 1: Find button by data-testid
+    // Strategy 1: Find button by data-testid (most reliable)
     let toggle = doc.querySelector('[data-testid="collapsedControl"]');
     if (toggle) {
-        console.log('[WeighIt] Found toggle via collapsedControl');
+        console.log('[WeighIt] ✓ Found toggle via collapsedControl');
         toggle.click();
         return true;
     }
 
-    // Strategy 2: Find button by class (Streamlit uses specific classes)
-    toggle = doc.querySelector('button[class*="collapsedControl"]');
-    if (toggle) {
-        console.log('[WeighIt] Found toggle via class');
-        toggle.click();
-        return true;
-    }
-
-    // Strategy 3: Find button with chevron/arrow SVG icon
-    // Look for buttons with SVG paths that might be chevrons
-    const allButtons = Array.from(doc.querySelectorAll('button'));
-    toggle = allButtons.find(btn => {
-        const svg = btn.querySelector('svg');
-        if (!svg) return false;
-
-        // Must NOT be inside the sidebar
-        if (btn.closest('[data-testid="stSidebar"]')) return false;
-
-        // Check if button is in the app header/toolbar area
-        const rect = btn.getBoundingClientRect();
-        if (rect.top > 200) return false;  // Not in header area
-
-        // Additional check: button should be relatively small (icon button)
-        if (rect.width > 100 || rect.height > 100) return false;
-
-        return true;
-    });
-
-    if (toggle) {
-        console.log('[WeighIt] Found toggle via SVG icon in header');
-        toggle.click();
-        return true;
-    }
-
-    // Strategy 4: Find the first small button in the header that's NOT the refresh button
-    const header = doc.querySelector('header');
-    if (header) {
-        const headerButtons = Array.from(header.querySelectorAll('button'));
-        toggle = headerButtons.find(btn => {
-            // Skip hidden buttons (like refresh_hidden)
-            if (btn.style.display === 'none') return false;
-            if (btn.innerText.includes('refresh_hidden')) return false;
-
-            // Must have SVG (icon button)
-            const svg = btn.querySelector('svg');
-            return svg !== null;
-        });
-
+    // Strategy 2: Find by aria-label (Streamlit sometimes uses this)
+    const ariaLabels = ['Open sidebar', 'Close sidebar', 'Toggle sidebar'];
+    for (const label of ariaLabels) {
+        toggle = doc.querySelector(`button[aria-label="${label}"]`);
         if (toggle) {
-            console.log('[WeighIt] Found toggle in header (first icon button)');
+            console.log(`[WeighIt] ✓ Found toggle via aria-label="${label}"`);
             toggle.click();
             return true;
         }
     }
 
-    console.log('[WeighIt] Could not find sidebar toggle button');
-    console.log('[WeighIt] Available buttons in header:',
-        header ? Array.from(header.querySelectorAll('button')).map(b => b.className).join(', ') : 'no header');
+    // Strategy 3: Find by looking for specific SVG pattern in very small buttons
+    console.log('[WeighIt] Searching for icon buttons in header...');
+    const allButtons = Array.from(doc.querySelectorAll('button'));
+    console.log('[WeighIt] Total buttons found:', allButtons.length);
+
+    // Filter to only very small buttons with SVG, not in sidebar
+    const candidates = allButtons.filter(btn => {
+        const rect = btn.getBoundingClientRect();
+        const hasSvg = btn.querySelector('svg') !== null;
+        const inSidebar = btn.closest('[data-testid="stSidebar"]') !== null;
+        const isSmall = rect.width < 80 && rect.height < 80;
+        const isInHeader = rect.top < 150;
+
+        return hasSvg && !inSidebar && isSmall && isInHeader;
+    });
+
+    console.log('[WeighIt] Icon button candidates:', candidates.length);
+    candidates.forEach((btn, idx) => {
+        const rect = btn.getBoundingClientRect();
+        console.log(`[WeighIt]   Candidate ${idx}: pos=(${rect.left.toFixed(0)}, ${rect.top.toFixed(0)}), size=${rect.width.toFixed(0)}x${rect.height.toFixed(0)}, class="${btn.className.substring(0, 50)}"`);
+    });
+
+    // Take the FIRST (leftmost, topmost) candidate
+    if (candidates.length > 0) {
+        // Sort by position: top-left first
+        candidates.sort((a, b) => {
+            const rectA = a.getBoundingClientRect();
+            const rectB = b.getBoundingClientRect();
+            // Prioritize leftmost, then topmost
+            if (Math.abs(rectA.left - rectB.left) > 10) {
+                return rectA.left - rectB.left;
+            }
+            return rectA.top - rectB.top;
+        });
+
+        toggle = candidates[0];
+        const rect = toggle.getBoundingClientRect();
+        console.log(`[WeighIt] ✓ Selected first candidate at (${rect.left.toFixed(0)}, ${rect.top.toFixed(0)})`);
+        toggle.click();
+        return true;
+    }
+
+    console.log('[WeighIt] ✗ Could not find sidebar toggle button');
     return false;
 }
 
 // Function to check if sidebar is currently visible
 function isSidebarVisible() {
     const sidebar = doc.querySelector('[data-testid="stSidebar"]');
-    if (!sidebar) return false;
+    if (!sidebar) {
+        console.log('[WeighIt] Sidebar element not found');
+        return false;
+    }
 
     // Check computed style
     const style = window.getComputedStyle(sidebar);
     const transform = style.transform;
 
+    console.log('[WeighIt] Sidebar transform:', transform);
+
     // Sidebar is visible if it's not translated off-screen
     // When collapsed, it typically has translateX(-100%) or similar
     if (transform && transform !== 'none') {
         const matrix = new DOMMatrix(transform);
+        const translateX = matrix.m41;
+        console.log('[WeighIt] Sidebar translateX:', translateX);
         // If translateX is close to 0, sidebar is visible
-        return Math.abs(matrix.m41) < 50;
+        const isVisible = Math.abs(translateX) < 50;
+        console.log('[WeighIt] Sidebar visible?', isVisible);
+        return isVisible;
     }
 
     // Check width as fallback
-    return sidebar.offsetWidth > 50;
+    const width = sidebar.offsetWidth;
+    console.log('[WeighIt] Sidebar width:', width);
+    const isVisible = width > 50;
+    console.log('[WeighIt] Sidebar visible (by width)?', isVisible);
+    return isVisible;
 }
 
 // Function to ensure sidebar is closed
