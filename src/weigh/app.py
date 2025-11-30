@@ -392,7 +392,7 @@ def temperature_dialog():
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
-# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y)
+# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4)
 components.html("""
 <script>
 const doc = window.parent.document;
@@ -411,6 +411,15 @@ doc.addEventListener('keydown', function(e) {
         const redoBtn = buttons.find(el => el.innerText.includes("Redo Last Undo"));
         if (redoBtn) {
             redoBtn.click();
+        }
+    }
+    // F4 = Close Application
+    if (e.altKey && e.key === 'F4') {
+        e.preventDefault();  // Prevent default browser behavior
+        const buttons = Array.from(doc.querySelectorAll('button'));
+        const closeBtn = buttons.find(el => el.innerText.includes("Close Application"));
+        if (closeBtn) {
+            closeBtn.click();
         }
     }
 });
@@ -566,9 +575,9 @@ with c2:
     )
     
     #weight_ph = st.empty()
-    display_weight()
     
-    weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
+    #weight_ph.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
+    display_weight()
 
 with c3:
     img = load_logo(SCALE_LOGO, height_px=138)
