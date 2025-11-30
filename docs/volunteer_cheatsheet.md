@@ -82,7 +82,7 @@
 ## End of Shift
 
 ### 10. Send the Report
-- **Open the admin bar** by clicking **>>** in the upper left (or press **F2**)
+- **Open the admin bar** by clicking **>>** in the upper left
 - Scroll down to the **"Send Report"** section
 - **Select the date range**:
   - **Start Date**: Defaults to today (change if needed)
@@ -90,11 +90,11 @@
 - **Enter the Recipient Email**: Type the coordinator's email address
 - Click the **"Email CSV"** button
 - Wait for the confirmation message: **"Email Sent!"**
-- **Close the admin bar** by clicking **>>** again (or press **F2**)
+- **Close the admin bar** by clicking **>>** again
 
 ### 11. Power Down
 - **Close the WeighIt App**:
-  - **Open the admin bar** by clicking **>>** in the upper left (or press **F2**)
+  - **Open the admin bar** by clicking **>>** in the upper left
   - Scroll down to the bottom
   - Click the **"Close Application"** button (or press **Alt+F4**)
 - **Turn off the scale** (press and hold the power button)
@@ -144,7 +144,6 @@ If you've tried the troubleshooting steps above and the WeighIt app still isn't 
 ## Quick Reference: Keyboard Shortcuts
 
 - **F1**: View this cheat sheet
-- **F2**: Toggle admin panel (open/close)
 - **F5**: Reload the app
 - **Ctrl+Z**: Undo last entry
 - **Ctrl+Y**: Redo last undo

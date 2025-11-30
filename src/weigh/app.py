@@ -415,138 +415,13 @@ def temperature_dialog():
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
-# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1 / F2) and Force Sidebar Closed on Startup
+# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1)
 components.html("""
 <script>
 const doc = window.parent.document;
 
-// Function to find and toggle sidebar - ultra-specific approach
-function toggleSidebar() {
-    console.log('[WeighIt] === Attempting to toggle sidebar ===');
-
-    // Strategy 1: Find button by data-testid (most reliable)
-    let toggle = doc.querySelector('[data-testid="collapsedControl"]');
-    if (toggle) {
-        console.log('[WeighIt] ✓ Found toggle via collapsedControl');
-        toggle.click();
-        return true;
-    }
-
-    // Strategy 2: Find by aria-label (Streamlit sometimes uses this)
-    const ariaLabels = ['Open sidebar', 'Close sidebar', 'Toggle sidebar'];
-    for (const label of ariaLabels) {
-        toggle = doc.querySelector(`button[aria-label="${label}"]`);
-        if (toggle) {
-            console.log(`[WeighIt] ✓ Found toggle via aria-label="${label}"`);
-            toggle.click();
-            return true;
-        }
-    }
-
-    // Strategy 3: Find by looking for specific SVG pattern in very small buttons
-    console.log('[WeighIt] Searching for icon buttons in header...');
-    const allButtons = Array.from(doc.querySelectorAll('button'));
-    console.log('[WeighIt] Total buttons found:', allButtons.length);
-
-    // Filter to only very small buttons with SVG, not in sidebar
-    const candidates = allButtons.filter(btn => {
-        const rect = btn.getBoundingClientRect();
-        const hasSvg = btn.querySelector('svg') !== null;
-        const inSidebar = btn.closest('[data-testid="stSidebar"]') !== null;
-        const isSmall = rect.width < 80 && rect.height < 80;
-        const isInHeader = rect.top < 150;
-
-        return hasSvg && !inSidebar && isSmall && isInHeader;
-    });
-
-    console.log('[WeighIt] Icon button candidates:', candidates.length);
-    candidates.forEach((btn, idx) => {
-        const rect = btn.getBoundingClientRect();
-        console.log(`[WeighIt]   Candidate ${idx}: pos=(${rect.left.toFixed(0)}, ${rect.top.toFixed(0)}), size=${rect.width.toFixed(0)}x${rect.height.toFixed(0)}, class="${btn.className.substring(0, 50)}"`);
-    });
-
-    // Take the FIRST (leftmost, topmost) candidate
-    if (candidates.length > 0) {
-        // Sort by position: top-left first
-        candidates.sort((a, b) => {
-            const rectA = a.getBoundingClientRect();
-            const rectB = b.getBoundingClientRect();
-            // Prioritize leftmost, then topmost
-            if (Math.abs(rectA.left - rectB.left) > 10) {
-                return rectA.left - rectB.left;
-            }
-            return rectA.top - rectB.top;
-        });
-
-        toggle = candidates[0];
-        const rect = toggle.getBoundingClientRect();
-        console.log(`[WeighIt] ✓ Selected first candidate at (${rect.left.toFixed(0)}, ${rect.top.toFixed(0)})`);
-        toggle.click();
-        return true;
-    }
-
-    console.log('[WeighIt] ✗ Could not find sidebar toggle button');
-    return false;
-}
-
-// Function to check if sidebar is currently visible
-function isSidebarVisible() {
-    const sidebar = doc.querySelector('[data-testid="stSidebar"]');
-    if (!sidebar) {
-        console.log('[WeighIt] Sidebar element not found');
-        return false;
-    }
-
-    // Check computed style
-    const style = window.getComputedStyle(sidebar);
-    const transform = style.transform;
-
-    console.log('[WeighIt] Sidebar transform:', transform);
-
-    // Sidebar is visible if it's not translated off-screen
-    // When collapsed, it typically has translateX(-100%) or similar
-    if (transform && transform !== 'none') {
-        const matrix = new DOMMatrix(transform);
-        const translateX = matrix.m41;
-        console.log('[WeighIt] Sidebar translateX:', translateX);
-        // If translateX is close to 0, sidebar is visible
-        const isVisible = Math.abs(translateX) < 50;
-        console.log('[WeighIt] Sidebar visible?', isVisible);
-        return isVisible;
-    }
-
-    // Check width as fallback
-    const width = sidebar.offsetWidth;
-    console.log('[WeighIt] Sidebar width:', width);
-    const isVisible = width > 50;
-    console.log('[WeighIt] Sidebar visible (by width)?', isVisible);
-    return isVisible;
-}
-
-// Function to ensure sidebar is closed
-function ensureSidebarClosed() {
-    console.log('[WeighIt] Checking sidebar state...');
-    if (isSidebarVisible()) {
-        console.log('[WeighIt] Sidebar is visible, closing it...');
-        toggleSidebar();
-    } else {
-        console.log('[WeighIt] Sidebar is already closed');
-    }
-}
-
-// Force sidebar closed on startup with multiple retries
-setTimeout(() => ensureSidebarClosed(), 200);
-setTimeout(() => ensureSidebarClosed(), 600);
-setTimeout(() => ensureSidebarClosed(), 1200);
-setTimeout(() => ensureSidebarClosed(), 2000);
-
 // Keyboard event listeners
 doc.addEventListener('keydown', function(e) {
-    // Debug: Log ALL F-key presses
-    if (e.key && e.key.startsWith('F')) {
-        console.log('[WeighIt] F-key detected:', e.key, 'keyCode:', e.keyCode);
-    }
-
     // Ctrl+Z = Undo
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
         const buttons = Array.from(doc.querySelectorAll('button'));
@@ -570,15 +445,6 @@ doc.addEventListener('keydown', function(e) {
         const cheatsheetBtn = buttons.find(el => el.innerText.includes("View Volunteer Cheat Sheet"));
         if (cheatsheetBtn) {
             cheatsheetBtn.click();
-        }
-    }
-    // F2 = Toggle Admin Pane (sidebar)
-    if (e.key === 'F2' || e.keyCode === 113) {
-        e.preventDefault();  // Prevent default browser behavior
-        console.log('[WeighIt] F2 pressed, toggling sidebar...');
-        const result = toggleSidebar();
-        if (!result) {
-            console.log('[WeighIt] F2 toggle failed - button not found');
         }
     }
     // Alt+F4 = Close Application
