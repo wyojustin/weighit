@@ -415,10 +415,58 @@ def temperature_dialog():
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
-# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1 / F2)
+# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1 / F2) and Force Sidebar Closed on Startup
 components.html("""
 <script>
 const doc = window.parent.document;
+
+// Function to find and toggle sidebar
+function toggleSidebar() {
+    // Try multiple selectors for sidebar toggle button
+    let sidebarToggle = doc.querySelector('[data-testid="collapsedControl"]');
+
+    if (!sidebarToggle) {
+        // Try alternative selectors
+        sidebarToggle = doc.querySelector('button[kind="header"]');
+    }
+
+    if (!sidebarToggle) {
+        // Look for button with chevron icon (>>)
+        const buttons = Array.from(doc.querySelectorAll('button'));
+        sidebarToggle = buttons.find(btn => {
+            const svg = btn.querySelector('svg');
+            return svg && (btn.getAttribute('aria-label') === 'Open sidebar' ||
+                          btn.getAttribute('aria-label') === 'Close sidebar');
+        });
+    }
+
+    if (sidebarToggle) {
+        sidebarToggle.click();
+        return true;
+    }
+    return false;
+}
+
+// Function to ensure sidebar is closed
+function ensureSidebarClosed() {
+    const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+    if (sidebar) {
+        // Check if sidebar is visible/expanded
+        const isExpanded = sidebar.getAttribute('aria-expanded') === 'true' ||
+                          !sidebar.hasAttribute('aria-expanded');
+
+        if (isExpanded) {
+            toggleSidebar();
+        }
+    }
+}
+
+// Force sidebar closed on startup
+setTimeout(() => ensureSidebarClosed(), 100);
+setTimeout(() => ensureSidebarClosed(), 500);
+setTimeout(() => ensureSidebarClosed(), 1000);
+
+// Keyboard event listeners
 doc.addEventListener('keydown', function(e) {
     // Ctrl+Z = Undo
     if (e.ctrlKey && e.key.toLowerCase() === 'z') {
@@ -448,10 +496,7 @@ doc.addEventListener('keydown', function(e) {
     // F2 = Toggle Admin Pane (sidebar)
     if (e.key === 'F2') {
         e.preventDefault();  // Prevent default browser behavior
-        const sidebarToggle = doc.querySelector('[data-testid="collapsedControl"]');
-        if (sidebarToggle) {
-            sidebarToggle.click();
-        }
+        toggleSidebar();
     }
     // Alt+F4 = Close Application
     if (e.altKey && e.key === 'F4') {
