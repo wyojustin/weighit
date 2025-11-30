@@ -34,11 +34,19 @@ def generate_report_csv(start_date, end_date):
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    
-    # 3. Write Summary Section
+
+    # 3. Calculate Grand Total (all sources, all types)
+    grand_total = 0.0
+    for src_data in totals.values():
+        for type_data in src_data.values():
+            grand_total += type_data['weight']
+
+    # Write Summary Section with Grand Total
     writer.writerow(["SUMMARY REPORT", f"{start_date} to {end_date}"])
     writer.writerow([]) # Blank line
-    
+    writer.writerow(["GRAND TOTAL (All Sources)", f"{grand_total:.2f} lb"])
+    writer.writerow([]) # Blank line
+
     # Sort alphabetically by Source, then Type
     for src in sorted(totals.keys()):
         # Separate temp-controlled and non-temp items
@@ -51,8 +59,14 @@ def generate_report_csv(start_date, end_date):
             else:
                 non_temp_items[typ] = data
         
-        # Write source name only once at the top
+        # Calculate mini grand total for this source
+        source_total = sum(data['weight'] for data in totals[src].values())
+
+        # Write source name and mini total
         writer.writerow([src])
+        writer.writerow(["SOURCE TOTAL", f"{source_total:.2f} lb", "", ""])
+        writer.writerow([]) # Blank line before items
+
         # Single header row for all items
         writer.writerow(["Type", "Total Weight (lb)", "Avg Pickup Temp (°F)", "Avg Dropoff Temp (°F)"])
 
@@ -68,7 +82,7 @@ def generate_report_csv(start_date, end_date):
             avg_pickup = f"{sum(data['pickup_temps']) / len(data['pickup_temps']):.1f}" if data['pickup_temps'] else ""
             avg_dropoff = f"{sum(data['dropoff_temps']) / len(data['dropoff_temps']):.1f}" if data['dropoff_temps'] else ""
             writer.writerow([typ, f"{weight:.2f}", avg_pickup, avg_dropoff])
-        
+
         # Blank line between sources
         writer.writerow([])
             

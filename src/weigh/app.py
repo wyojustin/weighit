@@ -317,74 +317,97 @@ def temperature_dialog():
             # Force dialog to close
             st.rerun()
 
-    # Inject JS for input behavior (Select All on Focus + Input Validation)
+    # Inject JS for input behavior (Select All on Focus + Input Validation + Enter Key + Auto-select first input)
     # We use a MutationObserver to attach listeners to the number inputs in the dialog
     components.html("""
     <script>
     const doc = window.parent.document;
-    
+
     function attachListeners() {
         // Target the specific number inputs by their aria-labels or just all number inputs in the dialog
         // Streamlit number inputs are usually <input type="number"> or <input type="text" inputmode="decimal">
         const inputs = Array.from(doc.querySelectorAll('input[type="number"], input[inputmode="decimal"]'));
-        
+
+        if (inputs.length === 0) return;
+
         inputs.forEach(input => {
             if (input.dataset.listenersAttached) return;
-            
+
             // Helper to select text
             const selectText = () => {
                 input.select();
             };
-            
+
             // 1. Select All on Focus
             input.addEventListener('focus', function(e) {
                 // Small timeout to ensure browser default behavior doesn't override us
                 setTimeout(selectText, 50);
             });
-            
+
             // Handle click/touch specifically (fixes selection clearing on mobile)
             input.addEventListener('mouseup', function(e) {
                 // Prevent default to stop browser from clearing selection
                 e.preventDefault();
                 setTimeout(selectText, 50);
             });
-            
+
             // 2. Strict Input Validation (Digits, one dot, one minus at start)
             input.addEventListener('input', function(e) {
                 let val = this.value;
-                
+
                 // Allow: digits, dot, minus
                 const clean = val.replace(/[^0-9.-]/g, '');
-                
+
                 // Handle multiple dots: keep only the first
                 const parts = clean.split('.');
                 let final = parts[0];
                 if (parts.length > 1) {
                     final += '.' + parts.slice(1).join('');
                 }
-                
+
                 // Handle minus: only allowed at start
                 if (final.indexOf('-') > 0) {
                     final = final.replace(/-/g, '');
                 }
-                
+
                 if (val !== final) {
                     this.value = final;
                 }
             });
-            
+
+            // 3. Enter key submits the form (clicks Save Entry button)
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const buttons = Array.from(doc.querySelectorAll('button'));
+                    const saveBtn = buttons.find(el => el.innerText.includes("Save Entry"));
+                    if (saveBtn) {
+                        saveBtn.click();
+                    }
+                }
+            });
+
             input.dataset.listenersAttached = 'true';
         });
+
+        // Auto-select first input (pickup temp) when dialog opens
+        if (inputs.length > 0 && !inputs[0].dataset.autoSelected) {
+            inputs[0].focus();
+            setTimeout(() => inputs[0].select(), 100);
+            inputs[0].dataset.autoSelected = 'true';
+        }
     }
 
     // Observe changes to detect when dialog opens
     const observer = new MutationObserver(() => {
         attachListeners();
     });
-    
+
     observer.observe(doc.body, { childList: true, subtree: true });
-    
-    // Initial run
+
+    // Initial run and retry to ensure it catches the dialog
+    setTimeout(attachListeners, 100);
+    setTimeout(attachListeners, 300);
     setTimeout(attachListeners, 500);
     </script>
     """, height=0, width=0)
@@ -392,7 +415,7 @@ def temperature_dialog():
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
-# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4)
+# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1 / F2)
 components.html("""
 <script>
 const doc = window.parent.document;
@@ -413,7 +436,24 @@ doc.addEventListener('keydown', function(e) {
             redoBtn.click();
         }
     }
-    // F4 = Close Application
+    // F1 = Show Volunteer Cheat Sheet
+    if (e.key === 'F1') {
+        e.preventDefault();  // Prevent default browser help
+        const buttons = Array.from(doc.querySelectorAll('button'));
+        const cheatsheetBtn = buttons.find(el => el.innerText.includes("View Volunteer Cheat Sheet"));
+        if (cheatsheetBtn) {
+            cheatsheetBtn.click();
+        }
+    }
+    // F2 = Toggle Admin Pane (sidebar)
+    if (e.key === 'F2') {
+        e.preventDefault();  // Prevent default browser behavior
+        const sidebarToggle = doc.querySelector('[data-testid="collapsedControl"]');
+        if (sidebarToggle) {
+            sidebarToggle.click();
+        }
+    }
+    // Alt+F4 = Close Application
     if (e.altKey && e.key === 'F4') {
         e.preventDefault();  // Prevent default browser behavior
         const buttons = Array.from(doc.querySelectorAll('button'));
