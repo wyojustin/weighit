@@ -1023,29 +1023,36 @@ rows = chunk_types(types)
 
 def on_log(type_info):
     """Handle button click - check if temperature is required"""
-    scale = get_scale()
-    r = scale.read_stable_weight(timeout_s=0.5) if scale else None
-    
-    # Check if we got a valid reading
-    if r and r.unit == "lb" and r.value > 0.0:
-        # Scale reading successful
-        src = st.session_state.source
+    try:
+        scale = get_scale()
+        r = scale.read_stable_weight(timeout_s=0.5) if scale else None
         
-        # Check if this type requires temperature
-        if type_info["requires_temp"]:
-            # Store pending entry and show dialog
-            st.session_state.pending_entry = {
-                "weight": r.value,
-                "source": src,
-                "type": type_info["name"]
-            }
-            st.session_state.show_temp_dialog = True
-            st.session_state.dialog_processed = False  # Reset the flag
+        # Check if we got a valid reading
+        if r and r.unit == "lb" and r.value > 0.0:
+            # Scale reading successful
+            src = st.session_state.source
+            
+            # Check if this type requires temperature
+            if type_info["requires_temp"]:
+                # Store pending entry and show dialog
+                st.session_state.pending_entry = {
+                    "weight": r.value,
+                    "source": src,
+                    "type": type_info["name"]
+                }
+                st.session_state.show_temp_dialog = True
+                st.session_state.dialog_processed = False  # Reset the flag
+            else:
+                # Log directly without temperature
+                logger_core.log_entry(r.value, src, type_info["name"])
         else:
-            # Log directly without temperature
-            logger_core.log_entry(r.value, src, type_info["name"])
-    else:
-        # Scale reading failed or returned zero - show manual entry dialog
+            # Scale reading failed or returned zero - show manual entry dialog
+            st.session_state.manual_entry_type_info = type_info
+            st.session_state.show_manual_entry_dialog = True
+            st.session_state.manual_dialog_processed = False
+    except (OSError, Exception) as e:
+        # Scale device error (e.g., not connected) - show manual entry dialog
+        logging.error(f"Scale error in on_log: {type(e).__name__}: {e}")
         st.session_state.manual_entry_type_info = type_info
         st.session_state.show_manual_entry_dialog = True
         st.session_state.manual_dialog_processed = False
