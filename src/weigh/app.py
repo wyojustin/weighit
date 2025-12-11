@@ -96,9 +96,32 @@ def get_history_html() -> str:
     view_date = st.session_state.get("view_date", None)
     if view_date:
         view_date = view_date.isoformat()
-    entries = logger_core.get_recent_entries(limit, source=current_source, date=view_date)
     
     rows_html = ""
+    
+    # Check if we have a pending manual entry
+    pending_entry = st.session_state.get("pending_manual_entry", None)
+    
+    # 0. If pending manual entry, add indicator row at top
+    if pending_entry:
+        type_info = pending_entry["type_info"]
+        source = pending_entry["source"]
+        
+        # Current timestamp
+        ts_str = datetime.now().strftime("%m/%d %H:%M")
+        
+        # Indicator row (no input field, just shows what's being entered)
+        rows_html += (
+            f'<tr style="background-color: #fffacd;">'
+            f'<td>{ts_str}</td>'
+            f'<td>{source}</td>'
+            f'<td>{type_info["name"]}</td>'
+            f'<td style="color: #888;">—</td>'
+            f'<td style="color: #888;">Pending...</td>'
+            f'</tr>'
+        )
+    
+    entries = logger_core.get_recent_entries(limit, source=current_source, date=view_date)
     
     # 1. Render actual data rows
     for row in entries:
@@ -129,7 +152,9 @@ def get_history_html() -> str:
         )
     
     # 2. Render blank filler rows to maintain constant height
-    slots_needed = limit - len(entries)
+    # Adjust for pending entry row if present
+    actual_rows = len(entries) + (1 if pending_entry else 0)
+    slots_needed = limit - actual_rows
     if slots_needed > 0:
         blank_row = "<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>"
         rows_html += blank_row * slots_needed
@@ -1088,6 +1113,53 @@ totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', u
 # 5. History Table
 history_ph = st.empty()
 history_ph.markdown(get_history_html(), unsafe_allow_html=True)
+
+# Handle manual weight entry if pending
+if st.session_state.get("pending_manual_entry"):
+    pending = st.session_state.pending_manual_entry
+    type_info = pending["type_info"]
+    source = pending["source"]
+    
+    st.markdown(f"**Entering weight for {type_info['name']} from {source}**")
+    
+    with st.form(key="manual_weight_form", clear_on_submit=True):
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            manual_weight = st.number_input(
+                "Weight (lbs)",
+                min_value=0.0,
+                max_value=500.0,
+                step=0.1,
+                format="%.1f",
+                key="manual_weight_input_form"
+            )
+        with col2:
+            submitted = st.form_submit_button("✓ Save", type="primary", use_container_width=True)
+        with col3:
+            cancelled = st.form_submit_button("✗ Cancel", use_container_width=True)
+        
+        if submitted and manual_weight > 0:
+            # Check if temperature is required
+            if type_info["requires_temp"]:
+                # Set up for temperature dialog
+                st.session_state.pending_entry = {
+                    "weight": manual_weight,
+                    "source": source,
+                    "type": type_info["name"]
+                }
+                st.session_state.show_temp_dialog = True
+                st.session_state.dialog_processed = False
+                st.session_state.pending_manual_entry = None
+                st.rerun()
+            else:
+                # Log directly without temperature
+                logger_core.log_entry(manual_weight, source, type_info["name"])
+                st.session_state.pending_manual_entry = None
+                st.rerun()
+        elif cancelled:
+            st.session_state.pending_manual_entry = None
+            st.rerun()
+
 
 # 6. Auto-Refresh - DISABLED when dialog exists
 # The dialog and auto-refresh conflict, so we disable auto-refresh
