@@ -57,7 +57,7 @@ Check Python syntax:
     python3 -m py_compile src/weigh/db_backend.py
 
 Test imports:
-    PYTHONPATH=src:$PYTHONPATH python3 -c "from weigh import system_time, logger_core, dao, db_backend; print('✓ All imports successful')"
+    PYTHONPATH=src:$PYTHONPATH python3 -c "from weigh import system_time, logger_core, dao, db_backend; print('All imports successful')"
 
 ================================================================================
 STEP 3: CREATE PULL REQUEST
@@ -73,68 +73,9 @@ Install gh CLI if needed:
 Authenticate (if not already):
     gh auth login
 
-Create pull request:
-    gh pr create \
-      --title "Fix: Prevent SQLite data loss from system clock desync" \
-      --body "$(cat <<'EOF'
-## Problem
-Data appeared "lost" when app ran without WiFi/NTP, causing incorrect system clock. Entries were logged with wrong timestamps and didn't match date filters.
+Create pull request with this command:
 
-## Root Cause
-No WiFi → No NTP → Wrong system clock → Data logged with incorrect dates → Queries filtered by "today" found no matches
-
-## Solution Implemented
-
-### 1. Show Date and Time in History Table
-- Changed format from HH:MM to MM/DD HH:MM
-- Makes timestamp issues immediately visible
-
-### 2. System Time Management
-- New module: src/weigh/system_time.py
-- Detects internet connectivity (DNS probes)
-- Checks NTP sync status (timedatectl/ntpstat)
-- Validates system time (year checks)
-- Allows manual time setting via sudo
-- Prompts user if no internet/NTP detected
-- Sidebar shows time sync status indicator
-
-### 3. Date Range Filter
-- Admin panel date picker to view ANY date
-- Quick "Today" and "Yesterday" buttons
-- Allows recovery of "lost" data with wrong timestamps
-- History and totals respect selected date
-
-### 4. Database Connection Leak Fixes
-- Added try/finally with conn.close() to all DB functions
-- Fixed in logger_core.py (8 functions), dao.py (2 functions)
-- Prevents resource exhaustion
-
-## Testing
-- ✅ Syntax validation passed
-- ✅ Import tests successful
-- ✅ Diagnostic script confirmed data recovery
-
-## Files Changed
-- src/weigh/system_time.py (NEW)
-- src/weigh/app.py
-- src/weigh/logger_core.py
-- src/weigh/dao.py
-- src/weigh/db_backend.py
-
-## Setup Required
-For manual time setting to work, add to sudoers:
-```bash
-sudo visudo
-# Add:
-username ALL=(ALL) NOPASSWD: /usr/bin/timedatectl, /usr/bin/date
-```
-
-## Closes
-Fixes data loss issue when running offline without NTP sync.
-EOF
-)" \
-      --base main \
-      --head claude/fix-sqlite-data-loss-016Ut6FA8uNFZVH41mzcEK34
+    gh pr create --title "Fix: Prevent SQLite data loss from system clock desync" --body "PROBLEM: Data appeared lost when app ran without WiFi/NTP, causing incorrect system clock. Entries were logged with wrong timestamps and did not match date filters. ROOT CAUSE: No WiFi means No NTP means Wrong system clock means Data logged with incorrect dates means Queries filtered by today found no matches. SOLUTION IMPLEMENTED: 1. Show Date and Time in History Table - Changed format from HH:MM to MM/DD HH:MM - Makes timestamp issues immediately visible. 2. System Time Management - New module: src/weigh/system_time.py - Detects internet connectivity (DNS probes) - Checks NTP sync status (timedatectl/ntpstat) - Validates system time (year checks) - Allows manual time setting via sudo - Prompts user if no internet/NTP detected - Sidebar shows time sync status indicator. 3. Date Range Filter - Admin panel date picker to view ANY date - Quick Today and Yesterday buttons - Allows recovery of lost data with wrong timestamps - History and totals respect selected date. 4. Database Connection Leak Fixes - Added try/finally with conn.close() to all DB functions - Fixed in logger_core.py (8 functions), dao.py (2 functions) - Prevents resource exhaustion. TESTING: Syntax validation passed. Import tests successful. Diagnostic script confirmed data recovery. FILES CHANGED: src/weigh/system_time.py (NEW), src/weigh/app.py, src/weigh/logger_core.py, src/weigh/dao.py, src/weigh/db_backend.py. SETUP REQUIRED: For manual time setting to work, add to sudoers with sudo visudo then add: username ALL=(ALL) NOPASSWD: /usr/bin/timedatectl, /usr/bin/date. CLOSES: Fixes data loss issue when running offline without NTP sync." --base main --head claude/fix-sqlite-data-loss-016Ut6FA8uNFZVH41mzcEK34
 
 
 OPTION B: USING WEB INTERFACE
@@ -146,65 +87,71 @@ Navigate to:
 Title:
     Fix: Prevent SQLite data loss from system clock desync
 
-Description (copy everything between the lines below):
---------------------------------------------------------------------------------
-## Problem
-Data appeared "lost" when app ran without WiFi/NTP, causing incorrect system clock. Entries were logged with wrong timestamps and didn't match date filters.
+Description (copy this text):
 
-## Root Cause
-No WiFi → No NTP → Wrong system clock → Data logged with incorrect dates → Queries filtered by "today" found no matches
+PROBLEM
 
-## Solution Implemented
+Data appeared lost when app ran without WiFi/NTP, causing incorrect system clock. Entries were logged with wrong timestamps and did not match date filters.
 
-### 1. Show Date and Time in History Table
-- Changed format from HH:MM to MM/DD HH:MM
-- Makes timestamp issues immediately visible
+ROOT CAUSE
 
-### 2. System Time Management
-- New module: src/weigh/system_time.py
-- Detects internet connectivity (DNS probes)
-- Checks NTP sync status (timedatectl/ntpstat)
-- Validates system time (year checks)
-- Allows manual time setting via sudo
-- Prompts user if no internet/NTP detected
-- Sidebar shows time sync status indicator
+No WiFi leads to No NTP leads to Wrong system clock leads to Data logged with incorrect dates leads to Queries filtered by today found no matches
 
-### 3. Date Range Filter
-- Admin panel date picker to view ANY date
-- Quick "Today" and "Yesterday" buttons
-- Allows recovery of "lost" data with wrong timestamps
-- History and totals respect selected date
+SOLUTION IMPLEMENTED
 
-### 4. Database Connection Leak Fixes
-- Added try/finally with conn.close() to all DB functions
-- Fixed in logger_core.py (8 functions), dao.py (2 functions)
-- Prevents resource exhaustion
+1. Show Date and Time in History Table
+   Changed format from HH:MM to MM/DD HH:MM
+   Makes timestamp issues immediately visible
 
-## Testing
-- ✅ Syntax validation passed
-- ✅ Import tests successful
-- ✅ Diagnostic script confirmed data recovery
+2. System Time Management
+   New module: src/weigh/system_time.py
+   Detects internet connectivity (DNS probes)
+   Checks NTP sync status (timedatectl/ntpstat)
+   Validates system time (year checks)
+   Allows manual time setting via sudo
+   Prompts user if no internet/NTP detected
+   Sidebar shows time sync status indicator
 
-## Files Changed
-- src/weigh/system_time.py (NEW)
-- src/weigh/app.py
-- src/weigh/logger_core.py
-- src/weigh/dao.py
-- src/weigh/db_backend.py
+3. Date Range Filter
+   Admin panel date picker to view ANY date
+   Quick Today and Yesterday buttons
+   Allows recovery of lost data with wrong timestamps
+   History and totals respect selected date
 
-## Setup Required
+4. Database Connection Leak Fixes
+   Added try/finally with conn.close() to all DB functions
+   Fixed in logger_core.py (8 functions), dao.py (2 functions)
+   Prevents resource exhaustion
+
+TESTING
+
+Syntax validation passed
+Import tests successful
+Diagnostic script confirmed data recovery
+
+FILES CHANGED
+
+src/weigh/system_time.py (NEW)
+src/weigh/app.py
+src/weigh/logger_core.py
+src/weigh/dao.py
+src/weigh/db_backend.py
+
+SETUP REQUIRED
+
 For manual time setting to work, add to sudoers:
-```bash
-sudo visudo
-# Add:
-username ALL=(ALL) NOPASSWD: /usr/bin/timedatectl, /usr/bin/date
-```
 
-## Closes
+    sudo visudo
+
+Add this line:
+
+    username ALL=(ALL) NOPASSWD: /usr/bin/timedatectl, /usr/bin/date
+
+Replace username with the actual username.
+
+CLOSES
+
 Fixes data loss issue when running offline without NTP sync.
---------------------------------------------------------------------------------
-
-Click "Create Pull Request"
 
 ================================================================================
 STEP 4: REVIEW AND MERGE PULL REQUEST
@@ -212,11 +159,11 @@ STEP 4: REVIEW AND MERGE PULL REQUEST
 
 REVIEW CHECKLIST
 ----------------
-- [ ] All commits are present (should see 2 commits)
-- [ ] Commit messages are clear and descriptive
-- [ ] File changes look correct (5 files: 1 new, 4 modified)
-- [ ] No unintended changes included
-- [ ] Code follows project conventions
+All commits are present (should see 2 commits)
+Commit messages are clear and descriptive
+File changes look correct (5 files: 1 new, 4 modified)
+No unintended changes included
+Code follows project conventions
 
 MERGE THE PR - OPTION A: USING GITHUB CLI
 ------------------------------------------
@@ -244,13 +191,13 @@ MERGE THE PR - OPTION B: USING WEB INTERFACE
 ---------------------------------------------
 1. Go to the PR page
 2. Review the changes
-3. Click "Merge pull request"
+3. Click Merge pull request button
 4. Choose merge strategy:
-   - Squash and merge (recommended) - Combines all commits into one
-   - Create a merge commit - Preserves all commits
-   - Rebase and merge - Replays commits on base branch
-5. Click "Confirm merge"
-6. Check "Delete branch" to clean up
+   Squash and merge (recommended) - Combines all commits into one
+   Create a merge commit - Preserves all commits
+   Rebase and merge - Replays commits on base branch
+5. Click Confirm merge button
+6. Check Delete branch checkbox to clean up
 
 ================================================================================
 STEP 5: VERIFY MERGE AND CLEANUP
@@ -284,16 +231,16 @@ Run the app:
     PYTHONPATH=src:$PYTHONPATH streamlit run src/weigh/app.py
 
 Verify:
-- Time sync status shows correctly
-- Date filter works
-- History shows MM/DD HH:MM format
-- Can recover old data with wrong dates
+Time sync status shows correctly
+Date filter works
+History shows MM/DD HH:MM format
+Can recover old data with wrong dates
 
 UPDATE DOCUMENTATION (if needed)
 ---------------------------------
-- Add setup instructions for sudo permissions
-- Document new date filter feature
-- Add troubleshooting guide for time sync issues
+Add setup instructions for sudo permissions
+Document new date filter feature
+Add troubleshooting guide for time sync issues
 
 DEPLOY TO PRODUCTION
 --------------------
@@ -315,12 +262,12 @@ The app needs sudo privileges to set the system clock. Follow these steps:
 1. Open sudoers file for editing:
     sudo visudo
 
-2. Add this line at the end of the file (replace 'username' with actual user):
+2. Add this line at the end of the file (replace username with actual user):
     username ALL=(ALL) NOPASSWD: /usr/bin/timedatectl, /usr/bin/date
 
 3. Save and exit:
-    - In nano: Ctrl+X, then Y, then Enter
-    - In vim: Press Esc, type :wq, press Enter
+    In nano: Ctrl+X, then Y, then Enter
+    In vim: Press Esc, type :wq, press Enter
 
 4. Test the configuration:
     sudo -l
@@ -333,9 +280,9 @@ The app needs sudo privileges to set the system clock. Follow these steps:
 ALTERNATIVE: MANUAL TIME SETTING
 ---------------------------------
 
-If you don't want to grant sudo privileges:
+If you do not want to grant sudo privileges:
 
-1. Users click "Skip (Use Current Time)" in dialog
+1. Users click Skip (Use Current Time) in dialog
 2. Manually set time via system settings
 3. Restart the app
 
@@ -372,33 +319,32 @@ SUMMARY
 
 WHAT WAS DONE
 -------------
-1. ✅ Diagnosed root cause (system clock desync without NTP)
-2. ✅ Implemented time sync detection and manual setting
-3. ✅ Added date/time visibility in UI
-4. ✅ Created date filter for data recovery
-5. ✅ Fixed all database connection leaks
-6. ✅ Committed and pushed changes
-7. ⏳ NEXT: Create and merge PR
+Diagnosed root cause (system clock desync without NTP)
+Implemented time sync detection and manual setting
+Added date/time visibility in UI
+Created date filter for data recovery
+Fixed all database connection leaks
+Committed and pushed changes
+NEXT: Create and merge PR
 
 IMPACT
 ------
-- Prevents future data loss
-- Allows recovery of existing "lost" data
-- Improves system reliability
-- Better error visibility for users
+Prevents future data loss
+Allows recovery of existing lost data
+Improves system reliability
+Better error visibility for users
 
 ROOT CAUSE EXPLANATION
 ----------------------
-No WiFi → No NTP → Wrong system clock → Data logged with incorrect dates →
-Appeared "lost" because queries filtered by current date didn't match
+No WiFi leads to No NTP leads to Wrong system clock leads to Data logged with incorrect dates leads to Appeared lost because queries filtered by current date did not match
 
 SOLUTION
 --------
-✅ Detect time sync problems at startup
-✅ Warn users and allow manual time setting
-✅ Show dates in history (not just time)
-✅ Add date filter to recover misplaced data
-✅ Fix connection leaks for reliability
+Detect time sync problems at startup
+Warn users and allow manual time setting
+Show dates in history (not just time)
+Add date filter to recover misplaced data
+Fix connection leaks for reliability
 
 ================================================================================
 END OF INSTRUCTIONS
