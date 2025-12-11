@@ -26,8 +26,9 @@ try:
     import report_utils
     import db_backend
     import scale_backend
+    import system_time
 except Exception:
-    from weigh import logger_core, report_utils, db_backend, scale_backend
+    from weigh import logger_core, report_utils, db_backend, scale_backend, system_time
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 STYLE_CSS = ASSETS_DIR / "style.css"
@@ -71,7 +72,10 @@ def get_types() -> List[dict]:
 
 def get_daily_totals_line() -> str:
     current_source = st.session_state.get("source", None)
-    totals = db_backend.get_daily_totals(source=current_source)
+    view_date = st.session_state.get("view_date", None)
+    if view_date:
+        view_date = view_date.isoformat()
+    totals = db_backend.get_daily_totals(source=current_source, date=view_date)
     
     # Get all types to show them all (even if 0.0)
     all_types = get_types()
@@ -86,10 +90,13 @@ def get_daily_totals_line() -> str:
     return " | ".join(parts)
 
 def get_history_html() -> str:
-    """Generates a fixed-height table with exactly 15 rows filtered by current source."""
+    """Generates a fixed-height table with exactly 15 rows filtered by current source and date."""
     limit = 15
     current_source = st.session_state.get("source", None)
-    entries = logger_core.get_recent_entries(limit, source=current_source)
+    view_date = st.session_state.get("view_date", None)
+    if view_date:
+        view_date = view_date.isoformat()
+    entries = logger_core.get_recent_entries(limit, source=current_source, date=view_date)
     
     rows_html = ""
     
@@ -97,7 +104,7 @@ def get_history_html() -> str:
     for row in entries:
         try:
             dt = datetime.fromisoformat(row["timestamp"]).astimezone()
-            ts_str = dt.strftime("%H:%M")
+            ts_str = dt.strftime("%m/%d %H:%M")
         except Exception:
             ts_str = row["timestamp"]
 
@@ -129,7 +136,7 @@ def get_history_html() -> str:
 
     return (
         f'<table class="history-table">'
-        f'<thead><tr><th>Time</th><th>Source</th><th>Type</th><th>Weight</th><th>Action</th></tr></thead>'
+        f'<thead><tr><th>Date/Time</th><th>Source</th><th>Type</th><th>Weight</th><th>Action</th></tr></thead>'
         f'<tbody>{rows_html}</tbody>'
         f'</table>'
     )
@@ -412,6 +419,81 @@ def temperature_dialog():
     </script>
     """, height=0, width=0)
 
+
+@st.dialog("⚠️ Set System Date & Time", width="large")
+def datetime_setup_dialog():
+    """Modal dialog for setting system date/time when no internet/NTP available"""
+
+    st.warning("**No internet connection detected** - System time may be incorrect!")
+    st.write("Please verify and set the correct date and time below:")
+
+    st.divider()
+
+    # Show current system time
+    current_time = datetime.now()
+    st.info(f"**Current system time:** {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    st.divider()
+
+    # Date and time inputs
+    col1, col2 = st.columns(2)
+
+    with col1:
+        new_date = st.date_input(
+            "Date",
+            value=current_time.date(),
+            help="Set the current date"
+        )
+
+    with col2:
+        new_time = st.time_input(
+            "Time",
+            value=current_time.time(),
+            help="Set the current time",
+            step=60  # 1 minute steps
+        )
+
+    st.divider()
+
+    col1, col2, col3 = st.columns([2, 2, 1])
+
+    with col1:
+        if st.button("Skip (Use Current Time)", use_container_width=True, key="skip_time"):
+            st.session_state.time_setup_complete = True
+            st.session_state.time_setup_skipped = True
+            st.rerun()
+
+    with col2:
+        if st.button("Set System Time", type="primary", use_container_width=True, key="set_time"):
+            # Combine date and time
+            new_datetime = datetime.combine(new_date, new_time)
+
+            with st.spinner("Setting system time..."):
+                success, message = system_time.set_system_time(new_datetime)
+
+                if success:
+                    st.success(f"✓ {message}")
+                    time.sleep(1)
+                    st.session_state.time_setup_complete = True
+                    st.session_state.time_setup_skipped = False
+                    st.rerun()
+                else:
+                    st.error(f"❌ {message}")
+                    st.info("""
+                    **Troubleshooting:**
+                    - Ensure the application has sudo privileges
+                    - You may need to run: `sudo visudo` and add:
+                      ```
+                      your-username ALL=(ALL) NOPASSWD: /usr/bin/timedatectl
+                      ```
+                    - Or manually set the time using: `sudo timedatectl set-time 'YYYY-MM-DD HH:MM:SS'`
+                    """)
+
+    with col3:
+        if st.button("Refresh", use_container_width=True, key="refresh_time"):
+            st.rerun()
+
+
 # ---------------- INIT ----------------
 load_css(STYLE_CSS)
 
@@ -464,12 +546,69 @@ doc.addEventListener('keydown', function(e) {
 # Sidebar
 with st.sidebar:
     st.header("Admin")
+
+    # Time sync status indicator
+    if "time_status" in st.session_state:
+        time_status = st.session_state.time_status
+        if time_status["time_valid"]:
+            if time_status["ntp_synced"]:
+                st.success("🕐 Time: NTP Synced")
+            elif time_status["has_internet"]:
+                st.warning("⚠️ Time: No NTP (using system clock)")
+            else:
+                if st.session_state.get("time_setup_skipped", False):
+                    st.warning("⚠️ Time: Manual (offline mode)")
+                else:
+                    st.info("✓ Time: Set manually")
+        else:
+            st.error(f"❌ Time: {time_status['time_warning']}")
+
+        # Button to re-check or manually set time
+        if st.button("🔄 Check/Set Time", use_container_width=True):
+            st.session_state.show_time_dialog = True
+            st.rerun()
+
+    st.divider()
+
     sources = get_sources()
-    
+
     # Initialize source if not set (will be displayed on main screen)
     if "source" not in st.session_state:
         st.session_state.source = sources[0] if sources else "Unknown"
-    
+
+    # --- DATE FILTER ---
+    st.subheader("View Date")
+
+    # Initialize view_date in session state if not set
+    if "view_date" not in st.session_state:
+        st.session_state.view_date = datetime.now(timezone.utc).date()
+
+    selected_date = st.date_input(
+        "Select date to view",
+        value=st.session_state.view_date,
+        key="date_filter",
+        help="View entries from a specific date (useful for recovering entries with incorrect timestamps)",
+        label_visibility="collapsed"
+    )
+
+    # Update session state
+    if selected_date != st.session_state.view_date:
+        st.session_state.view_date = selected_date
+
+    # Quick date buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Today", use_container_width=True):
+            st.session_state.view_date = datetime.now(timezone.utc).date()
+            st.rerun()
+    with col2:
+        if st.button("Yesterday", use_container_width=True):
+            from datetime import timedelta
+            st.session_state.view_date = datetime.now(timezone.utc).date() - timedelta(days=1)
+            st.rerun()
+
+    st.divider()
+
     # --- Undo / Redo ---
     c_undo, c_redo = st.columns(2)
     with c_undo:
@@ -561,6 +700,33 @@ if "dialog_processed" not in st.session_state:
     st.session_state.dialog_processed = False
 if "show_cheatsheet" not in st.session_state:
     st.session_state.show_cheatsheet = False
+if "time_setup_complete" not in st.session_state:
+    st.session_state.time_setup_complete = False
+if "time_setup_skipped" not in st.session_state:
+    st.session_state.time_setup_skipped = False
+if "time_status_checked" not in st.session_state:
+    st.session_state.time_status_checked = False
+if "show_time_dialog" not in st.session_state:
+    st.session_state.show_time_dialog = False
+
+# Check system time on first run
+if not st.session_state.time_status_checked:
+    time_status = system_time.get_time_sync_status()
+    st.session_state.time_status = time_status
+    st.session_state.time_status_checked = True
+
+    # If no internet and not NTP synced, prompt for time setup
+    if time_status["needs_manual_time_set"] and not st.session_state.time_setup_complete:
+        st.session_state.show_time_dialog = True
+
+    # Log warnings if time seems invalid
+    if not time_status["time_valid"]:
+        logging.warning(f"System time validation failed: {time_status['time_warning']}")
+
+# Show time setup dialog if needed (before main UI)
+if st.session_state.get("show_time_dialog", False) and not st.session_state.get("time_setup_complete", False):
+    datetime_setup_dialog()
+    st.stop()  # Don't render main UI until time is set
 
 # ---------------- MAIN UI ----------------
 
