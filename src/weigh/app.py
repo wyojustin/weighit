@@ -554,6 +554,47 @@ doc.addEventListener('keydown', function(e) {
 </script>
 """, height=0, width=0)
 
+# Session State Defaults
+if "last_refresh_t" not in st.session_state:
+    st.session_state.last_refresh_t = 0.0
+if "show_temp_dialog" not in st.session_state:
+    st.session_state.show_temp_dialog = False
+if "pending_entry" not in st.session_state:
+    st.session_state.pending_entry = None
+if "dialog_processed" not in st.session_state:
+    st.session_state.dialog_processed = False
+if "show_cheatsheet" not in st.session_state:
+    st.session_state.show_cheatsheet = False
+if "time_setup_complete" not in st.session_state:
+    st.session_state.time_setup_complete = False
+if "time_setup_skipped" not in st.session_state:
+    st.session_state.time_setup_skipped = False
+if "time_status_checked" not in st.session_state:
+    st.session_state.time_status_checked = False
+if "show_time_dialog" not in st.session_state:
+    st.session_state.show_time_dialog = False
+
+# Check system time on first run
+if not st.session_state.time_status_checked:
+    time_status = system_time.get_time_sync_status()
+    st.session_state.time_status = time_status
+    st.session_state.time_status_checked = True
+
+    # If no internet and not NTP synced, prompt for time setup
+    if time_status["needs_manual_time_set"] and not st.session_state.time_setup_complete:
+        st.session_state.show_time_dialog = True
+
+    # Log warnings if time seems invalid
+    if not time_status["time_valid"]:
+        logging.warning(f"System time validation failed: {time_status['time_warning']}")
+
+# Show time setup dialog if needed (automatic on startup or manual from admin)
+if st.session_state.get("show_time_dialog", False):
+    datetime_setup_dialog()
+    # Only stop rendering main UI if this is the initial startup check
+    if not st.session_state.get("time_setup_complete", False):
+        st.stop()  # Don't render main UI until time is set on first run
+
 
 # Sidebar
 with st.sidebar:
@@ -701,46 +742,6 @@ with st.sidebar:
         os.system("pkill -f epiphany")
         os.kill(os.getpid(), signal.SIGTERM)
 
-# Session State Defaults
-if "last_refresh_t" not in st.session_state:
-    st.session_state.last_refresh_t = 0.0
-if "show_temp_dialog" not in st.session_state:
-    st.session_state.show_temp_dialog = False
-if "pending_entry" not in st.session_state:
-    st.session_state.pending_entry = None
-if "dialog_processed" not in st.session_state:
-    st.session_state.dialog_processed = False
-if "show_cheatsheet" not in st.session_state:
-    st.session_state.show_cheatsheet = False
-if "time_setup_complete" not in st.session_state:
-    st.session_state.time_setup_complete = False
-if "time_setup_skipped" not in st.session_state:
-    st.session_state.time_setup_skipped = False
-if "time_status_checked" not in st.session_state:
-    st.session_state.time_status_checked = False
-if "show_time_dialog" not in st.session_state:
-    st.session_state.show_time_dialog = False
-
-# Check system time on first run
-if not st.session_state.time_status_checked:
-    time_status = system_time.get_time_sync_status()
-    st.session_state.time_status = time_status
-    st.session_state.time_status_checked = True
-
-    # If no internet and not NTP synced, prompt for time setup
-    if time_status["needs_manual_time_set"] and not st.session_state.time_setup_complete:
-        st.session_state.show_time_dialog = True
-
-    # Log warnings if time seems invalid
-    if not time_status["time_valid"]:
-        logging.warning(f"System time validation failed: {time_status['time_warning']}")
-
-# Show time setup dialog if needed (automatic on startup or manual from admin)
-if st.session_state.get("show_time_dialog", False):
-    datetime_setup_dialog()
-    # Only stop rendering main UI if this is the initial startup check
-    if not st.session_state.get("time_setup_complete", False):
-        st.stop()  # Don't render main UI until time is set on first run
 
 # ---------------- MAIN UI ----------------
 
