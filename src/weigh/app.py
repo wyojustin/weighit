@@ -420,6 +420,182 @@ def temperature_dialog():
     """, height=0, width=0)
 
 
+@st.dialog("⚖️ Manual Weight Entry")
+def manual_weight_entry_dialog():
+    """Modal dialog for manually entering weight when scale is not available"""
+    type_info = st.session_state.manual_entry_type_info
+    if not type_info or st.session_state.get("manual_dialog_processed", False):
+        st.session_state.show_manual_entry_dialog = False
+        st.session_state.manual_dialog_processed = False
+        st.rerun()
+        return
+    
+    type_name = type_info["name"]
+    requires_temp = type_info["requires_temp"]
+    source = st.session_state.source
+    
+    st.warning("**Scale not readable** - Please enter weight manually")
+    st.write(f"Recording **{type_name}** from **{source}**")
+    
+    st.divider()
+    
+    # Weight input
+    manual_weight = st.number_input(
+        "Weight (lbs)",
+        min_value=0.0,
+        max_value=500.0,
+        value=0.0,
+        step=0.1,
+        format="%.1f",
+        help="Enter the weight in pounds",
+        key="manual_weight_input"
+    )
+    
+    # Temperature inputs if required
+    temp_pickup = None
+    temp_dropoff = None
+    
+    if requires_temp:
+        st.divider()
+        st.write("**Temperature Recording**")
+        
+        temp_pickup = st.number_input(
+            "Pickup Temperature (°F)",
+            min_value=-40.0,
+            max_value=200.0,
+            value=40.0,
+            step=1.0,
+            format="%.1f",
+            help="Temperature at pickup location",
+            key="manual_temp_pickup_input"
+        )
+        
+        temp_dropoff = st.number_input(
+            "Dropoff Temperature (°F)",
+            min_value=-40.0,
+            max_value=200.0,
+            value=38.0,
+            step=1.0,
+            format="%.1f",
+            help="Temperature at dropoff/storage location",
+            key="manual_temp_dropoff_input"
+        )
+    
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Cancel", use_container_width=True, key="cancel_manual"):
+            st.session_state.show_manual_entry_dialog = False
+            st.session_state.manual_entry_type_info = None
+            st.session_state.manual_dialog_processed = True
+            st.rerun()
+    
+    with col2:
+        if st.button("Save Entry", type="primary", use_container_width=True, key="save_manual"):
+            if manual_weight > 0:
+                # Log the entry with or without temperatures
+                if requires_temp:
+                    logger_core.log_entry(
+                        manual_weight,
+                        source,
+                        type_name,
+                        temp_pickup_f=temp_pickup,
+                        temp_dropoff_f=temp_dropoff
+                    )
+                else:
+                    logger_core.log_entry(manual_weight, source, type_name)
+                
+                # Mark as processed and clear
+                st.session_state.manual_dialog_processed = True
+                st.session_state.show_manual_entry_dialog = False
+                st.session_state.manual_entry_type_info = None
+                st.rerun()
+            else:
+                st.error("Please enter a weight greater than 0")
+
+    # Inject JS for input behavior (Select All on Focus + Enter Key + Auto-select first input)
+    components.html("""
+    <script>
+    const doc = window.parent.document;
+
+    function attachListeners() {
+        const inputs = Array.from(doc.querySelectorAll('input[type="number"], input[inputmode="decimal"]'));
+
+        if (inputs.length === 0) return;
+
+        inputs.forEach(input => {
+            if (input.dataset.listenersAttached) return;
+
+            const selectText = () => {
+                input.select();
+            };
+
+            // Select All on Focus
+            input.addEventListener('focus', function(e) {
+                setTimeout(selectText, 50);
+            });
+
+            input.addEventListener('mouseup', function(e) {
+                e.preventDefault();
+                setTimeout(selectText, 50);
+            });
+
+            // Input Validation
+            input.addEventListener('input', function(e) {
+                let val = this.value;
+                const clean = val.replace(/[^0-9.-]/g, '');
+                const parts = clean.split('.');
+                let final = parts[0];
+                if (parts.length > 1) {
+                    final += '.' + parts.slice(1).join('');
+                }
+                if (final.indexOf('-') > 0) {
+                    final = final.replace(/-/g, '');
+                }
+                if (val !== final) {
+                    this.value = final;
+                }
+            });
+
+            // Enter key submits
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const buttons = Array.from(doc.querySelectorAll('button'));
+                    const saveBtn = buttons.find(el => el.innerText.includes("Save Entry"));
+                    if (saveBtn) {
+                        saveBtn.click();
+                    }
+                }
+            });
+
+            input.dataset.listenersAttached = 'true';
+        });
+
+        // Auto-select first input (weight) when dialog opens
+        if (inputs.length > 0 && !inputs[0].dataset.autoSelected) {
+            inputs[0].focus();
+            setTimeout(() => inputs[0].select(), 100);
+            inputs[0].dataset.autoSelected = 'true';
+        }
+    }
+
+    const observer = new MutationObserver(() => {
+        attachListeners();
+    });
+
+    observer.observe(doc.body, { childList: true, subtree: true });
+
+    setTimeout(attachListeners, 100);
+    setTimeout(attachListeners, 300);
+    setTimeout(attachListeners, 500);
+    </script>
+    """, height=0, width=0)
+
+
+
 @st.dialog("🕐 Set System Date & Time", width="large")
 def datetime_setup_dialog():
     """Modal dialog for setting system date/time (automatic on startup or manual from admin)"""
@@ -573,6 +749,12 @@ if "time_status_checked" not in st.session_state:
     st.session_state.time_status_checked = False
 if "show_time_dialog" not in st.session_state:
     st.session_state.show_time_dialog = False
+if "show_manual_entry_dialog" not in st.session_state:
+    st.session_state.show_manual_entry_dialog = False
+if "manual_entry_type_info" not in st.session_state:
+    st.session_state.manual_entry_type_info = None
+if "manual_dialog_processed" not in st.session_state:
+    st.session_state.manual_dialog_processed = False
 
 # Check system time on first run
 if not st.session_state.time_status_checked:
@@ -843,23 +1025,30 @@ def on_log(type_info):
     """Handle button click - check if temperature is required"""
     scale = get_scale()
     r = scale.read_stable_weight(timeout_s=0.5) if scale else None
-    if r and r.unit == "lb":
-        if r.value > 0.0:
-            src = st.session_state.source
-            
-            # Check if this type requires temperature
-            if type_info["requires_temp"]:
-                # Store pending entry and show dialog
-                st.session_state.pending_entry = {
-                    "weight": r.value,
-                    "source": src,
-                    "type": type_info["name"]
-                }
-                st.session_state.show_temp_dialog = True
-                st.session_state.dialog_processed = False  # Reset the flag
-            else:
-                # Log directly without temperature
-                logger_core.log_entry(r.value, src, type_info["name"])
+    
+    # Check if we got a valid reading
+    if r and r.unit == "lb" and r.value > 0.0:
+        # Scale reading successful
+        src = st.session_state.source
+        
+        # Check if this type requires temperature
+        if type_info["requires_temp"]:
+            # Store pending entry and show dialog
+            st.session_state.pending_entry = {
+                "weight": r.value,
+                "source": src,
+                "type": type_info["name"]
+            }
+            st.session_state.show_temp_dialog = True
+            st.session_state.dialog_processed = False  # Reset the flag
+        else:
+            # Log directly without temperature
+            logger_core.log_entry(r.value, src, type_info["name"])
+    else:
+        # Scale reading failed or returned zero - show manual entry dialog
+        st.session_state.manual_entry_type_info = type_info
+        st.session_state.show_manual_entry_dialog = True
+        st.session_state.manual_dialog_processed = False
 
 for i, row in enumerate(rows):
     cols = st.columns(len(row), gap="small")
@@ -875,6 +1064,10 @@ for i, row in enumerate(rows):
 # Show temperature dialog if needed
 if st.session_state.get("show_temp_dialog", False):
     temperature_dialog()
+
+# Show manual entry dialog if needed
+if st.session_state.get("show_manual_entry_dialog", False):
+    manual_weight_entry_dialog()
 
 # Show cheat sheet dialog if requested
 if st.session_state.get("show_cheatsheet", False):
