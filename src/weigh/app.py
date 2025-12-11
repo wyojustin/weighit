@@ -420,12 +420,22 @@ def temperature_dialog():
     """, height=0, width=0)
 
 
-@st.dialog("⚠️ Set System Date & Time", width="large")
+@st.dialog("🕐 Set System Date & Time", width="large")
 def datetime_setup_dialog():
-    """Modal dialog for setting system date/time when no internet/NTP available"""
+    """Modal dialog for setting system date/time (automatic on startup or manual from admin)"""
 
-    st.warning("**No internet connection detected** - System time may be incorrect!")
-    st.write("Please verify and set the correct date and time below:")
+    # Get current time sync status
+    time_status = system_time.get_time_sync_status()
+    
+    # Show conditional warning based on internet/NTP status
+    if not time_status["has_internet"]:
+        st.warning("**No internet connection detected** - System time may be incorrect!")
+    elif not time_status["ntp_synced"]:
+        st.info("**Internet available but NTP not synchronized** - You can manually set the time if needed.")
+    else:
+        st.success("**NTP synchronized** - System time should be accurate.")
+    
+    st.write("Verify and set the correct date and time below:")
 
     st.divider()
 
@@ -458,9 +468,9 @@ def datetime_setup_dialog():
     col1, col2, col3 = st.columns([2, 2, 1])
 
     with col1:
-        if st.button("Skip (Use Current Time)", use_container_width=True, key="skip_time"):
+        if st.button("Cancel", use_container_width=True, key="skip_time"):
             st.session_state.time_setup_complete = True
-            st.session_state.time_setup_skipped = True
+            st.session_state.show_time_dialog = False
             st.rerun()
 
     with col2:
@@ -475,7 +485,9 @@ def datetime_setup_dialog():
                     st.success(f"✓ {message}")
                     time.sleep(1)
                     st.session_state.time_setup_complete = True
-                    st.session_state.time_setup_skipped = False
+                    st.session_state.show_time_dialog = False
+                    # Refresh time status
+                    st.session_state.time_status = system_time.get_time_sync_status()
                     st.rerun()
                 else:
                     st.error(f"❌ {message}")
@@ -563,8 +575,8 @@ with st.sidebar:
         else:
             st.error(f"❌ Time: {time_status['time_warning']}")
 
-        # Button to re-check or manually set time
-        if st.button("🔄 Check/Set Time", use_container_width=True):
+        # Button to manually set time
+        if st.button("🕐 Set Date/Time", use_container_width=True):
             st.session_state.show_time_dialog = True
             st.rerun()
 
@@ -723,10 +735,12 @@ if not st.session_state.time_status_checked:
     if not time_status["time_valid"]:
         logging.warning(f"System time validation failed: {time_status['time_warning']}")
 
-# Show time setup dialog if needed (before main UI)
-if st.session_state.get("show_time_dialog", False) and not st.session_state.get("time_setup_complete", False):
+# Show time setup dialog if needed (automatic on startup or manual from admin)
+if st.session_state.get("show_time_dialog", False):
     datetime_setup_dialog()
-    st.stop()  # Don't render main UI until time is set
+    # Only stop rendering main UI if this is the initial startup check
+    if not st.session_state.get("time_setup_complete", False):
+        st.stop()  # Don't render main UI until time is set on first run
 
 # ---------------- MAIN UI ----------------
 
