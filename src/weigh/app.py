@@ -89,136 +89,57 @@ def get_daily_totals_line() -> str:
     
     return " | ".join(parts)
 
-def get_history_display():
-    """Displays history with inline manual entry support when scale fails"""
+def get_history_html() -> str:
+    """Generates a fixed-height table with exactly 15 rows filtered by current source and date."""
     limit = 15
     current_source = st.session_state.get("source", None)
     view_date = st.session_state.get("view_date", None)
     if view_date:
         view_date = view_date.isoformat()
-    
-    # Check if we have a pending manual entry
-    pending_entry = st.session_state.get("pending_manual_entry", None)
-    
-    # If pending manual entry, show editable row first
-    if pending_entry:
-        type_info = pending_entry["type_info"]
-        source = pending_entry["source"]
-        
-        st.markdown("### ⚖️ Enter Weight Manually")
-        st.warning(f"**Scale not readable** - Recording **{type_info['name']}** from **{source}**")
-        
-        with st.form(key="manual_entry_form", clear_on_submit=True):
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-            
-            with col1:
-                manual_weight = st.number_input(
-                    "Weight (lbs)",
-                    min_value=0.0,
-                    max_value=500.0,
-                    value=0.0,
-                    step=0.1,
-                    format="%.1f",
-                    key="inline_weight"
-                )
-            
-            # Temperature inputs if required
-            temp_pickup = None
-            temp_dropoff = None
-            if type_info["requires_temp"]:
-                with col2:
-                    temp_pickup = st.number_input(
-                        "Pickup Temp (°F)",
-                        min_value=-40.0,
-                        max_value=200.0,
-                        value=40.0,
-                        step=1.0,
-                        format="%.1f",
-                        key="inline_temp_pickup"
-                    )
-                
-                with col3:
-                    temp_dropoff = st.number_input(
-                        "Dropoff Temp (°F)",
-                        min_value=-40.0,
-                        max_value=200.0,
-                        value=38.0,
-                        step=1.0,
-                        format="%.1f",
-                        key="inline_temp_dropoff"
-                    )
-            
-            # Buttons
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                save_btn = st.form_submit_button("✓ Save Entry", type="primary", use_container_width=True)
-            with col_btn2:
-                cancel_btn = st.form_submit_button("✗ Cancel", use_container_width=True)
-            
-            if save_btn:
-                if manual_weight > 0:
-                    # Log the entry
-                    if type_info["requires_temp"]:
-                        logger_core.log_entry(
-                            manual_weight,
-                            source,
-                            type_info["name"],
-                            temp_pickup_f=temp_pickup,
-                            temp_dropoff_f=temp_dropoff
-                        )
-                    else:
-                        logger_core.log_entry(manual_weight, source, type_info["name"])
-                    
-                    # Clear pending entry
-                    st.session_state.pending_manual_entry = None
-                    st.rerun()
-                else:
-                    st.error("Please enter a weight greater than 0")
-            
-            if cancel_btn:
-                st.session_state.pending_manual_entry = None
-                st.rerun()
-        
-        st.divider()
-    
-    # Show history table
-    st.markdown("### Recent Entries")
     entries = logger_core.get_recent_entries(limit, source=current_source, date=view_date)
     
-    if entries:
-        # Create table data
-        table_data = []
-        for row in entries:
-            try:
-                dt = datetime.fromisoformat(row["timestamp"]).astimezone()
-                ts_str = dt.strftime("%m/%d %H:%M")
-            except Exception:
-                ts_str = row["timestamp"]
-            
-            # Add temperature info if present
-            temp_info = ""
-            if row.get("temp_pickup_f") is not None or row.get("temp_dropoff_f") is not None:
-                temps = []
-                if row.get("temp_pickup_f") is not None:
-                    temps.append(f"Pick:{row['temp_pickup_f']:.1f}°F")
-                if row.get("temp_dropoff_f") is not None:
-                    temps.append(f"Drop:{row['temp_dropoff_f']:.1f}°F")
-                temp_info = f" ({', '.join(temps)})"
-            
-            table_data.append({
-                "Time": ts_str,
-                "Source": row["source"],
-                "Type": f"{row['type']}{temp_info}",
-                "Weight": f"{row['weight_lb']:.2f} lb",
-                "Status": "Logged"
-            })
-        
-        # Display as dataframe
-        import pandas as pd
-        df = pd.DataFrame(table_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No entries yet")
+    rows_html = ""
+    
+    # 1. Render actual data rows
+    for row in entries:
+        try:
+            dt = datetime.fromisoformat(row["timestamp"]).astimezone()
+            ts_str = dt.strftime("%m/%d %H:%M")
+        except Exception:
+            ts_str = row["timestamp"]
+
+        # Add temperature info if present
+        temp_info = ""
+        if row.get("temp_pickup_f") is not None or row.get("temp_dropoff_f") is not None:
+            temps = []
+            if row.get("temp_pickup_f") is not None:
+                temps.append(f"Pick:{row['temp_pickup_f']:.1f}°F")
+            if row.get("temp_dropoff_f") is not None:
+                temps.append(f"Drop:{row['temp_dropoff_f']:.1f}°F")
+            temp_info = f" ({', '.join(temps)})"
+
+        rows_html += (
+            f"<tr>"
+            f"<td>{ts_str}</td>"
+            f"<td>{row['source']}</td>"
+            f"<td>{row['type']}{temp_info}</td>"
+            f"<td>{row['weight_lb']:.2f} lb</td>"
+            f"<td>Logged</td>"
+            f"</tr>"
+        )
+    
+    # 2. Render blank filler rows to maintain constant height
+    slots_needed = limit - len(entries)
+    if slots_needed > 0:
+        blank_row = "<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>"
+        rows_html += blank_row * slots_needed
+
+    return (
+        f'<table class="history-table">'
+        f'<thead><tr><th>Date/Time</th><th>Source</th><th>Type</th><th>Weight</th><th>Action</th></tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        f'</table>'
+    )
 
 def load_logo(path: Path, height_px: int = 100) -> Optional[Image.Image]:
     if not path.exists():
@@ -499,6 +420,182 @@ def temperature_dialog():
     """, height=0, width=0)
 
 
+@st.dialog("⚖️ Manual Weight Entry")
+def manual_weight_entry_dialog():
+    """Modal dialog for manually entering weight when scale is not available"""
+    type_info = st.session_state.manual_entry_type_info
+    if not type_info or st.session_state.get("manual_dialog_processed", False):
+        st.session_state.show_manual_entry_dialog = False
+        st.session_state.manual_dialog_processed = False
+        st.rerun()
+        return
+    
+    type_name = type_info["name"]
+    requires_temp = type_info["requires_temp"]
+    source = st.session_state.source
+    
+    st.warning("**Scale not readable** - Please enter weight manually")
+    st.write(f"Recording **{type_name}** from **{source}**")
+    
+    st.divider()
+    
+    # Weight input
+    manual_weight = st.number_input(
+        "Weight (lbs)",
+        min_value=0.0,
+        max_value=500.0,
+        value=0.0,
+        step=0.1,
+        format="%.1f",
+        help="Enter the weight in pounds",
+        key="manual_weight_input"
+    )
+    
+    # Temperature inputs if required
+    temp_pickup = None
+    temp_dropoff = None
+    
+    if requires_temp:
+        st.divider()
+        st.write("**Temperature Recording**")
+        
+        temp_pickup = st.number_input(
+            "Pickup Temperature (°F)",
+            min_value=-40.0,
+            max_value=200.0,
+            value=40.0,
+            step=1.0,
+            format="%.1f",
+            help="Temperature at pickup location",
+            key="manual_temp_pickup_input"
+        )
+        
+        temp_dropoff = st.number_input(
+            "Dropoff Temperature (°F)",
+            min_value=-40.0,
+            max_value=200.0,
+            value=38.0,
+            step=1.0,
+            format="%.1f",
+            help="Temperature at dropoff/storage location",
+            key="manual_temp_dropoff_input"
+        )
+    
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Cancel", use_container_width=True, key="cancel_manual"):
+            st.session_state.show_manual_entry_dialog = False
+            st.session_state.manual_entry_type_info = None
+            st.session_state.manual_dialog_processed = True
+            st.rerun()
+    
+    with col2:
+        if st.button("Save Entry", type="primary", use_container_width=True, key="save_manual"):
+            if manual_weight > 0:
+                # Log the entry with or without temperatures
+                if requires_temp:
+                    logger_core.log_entry(
+                        manual_weight,
+                        source,
+                        type_name,
+                        temp_pickup_f=temp_pickup,
+                        temp_dropoff_f=temp_dropoff
+                    )
+                else:
+                    logger_core.log_entry(manual_weight, source, type_name)
+                
+                # Mark as processed and clear
+                st.session_state.manual_dialog_processed = True
+                st.session_state.show_manual_entry_dialog = False
+                st.session_state.manual_entry_type_info = None
+                st.rerun()
+            else:
+                st.error("Please enter a weight greater than 0")
+
+    # Inject JS for input behavior (Select All on Focus + Enter Key + Auto-select first input)
+    components.html("""
+    <script>
+    const doc = window.parent.document;
+
+    function attachListeners() {
+        const inputs = Array.from(doc.querySelectorAll('input[type="number"], input[inputmode="decimal"]'));
+
+        if (inputs.length === 0) return;
+
+        inputs.forEach(input => {
+            if (input.dataset.listenersAttached) return;
+
+            const selectText = () => {
+                input.select();
+            };
+
+            // Select All on Focus
+            input.addEventListener('focus', function(e) {
+                setTimeout(selectText, 50);
+            });
+
+            input.addEventListener('mouseup', function(e) {
+                e.preventDefault();
+                setTimeout(selectText, 50);
+            });
+
+            // Input Validation
+            input.addEventListener('input', function(e) {
+                let val = this.value;
+                const clean = val.replace(/[^0-9.-]/g, '');
+                const parts = clean.split('.');
+                let final = parts[0];
+                if (parts.length > 1) {
+                    final += '.' + parts.slice(1).join('');
+                }
+                if (final.indexOf('-') > 0) {
+                    final = final.replace(/-/g, '');
+                }
+                if (val !== final) {
+                    this.value = final;
+                }
+            });
+
+            // Enter key submits
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const buttons = Array.from(doc.querySelectorAll('button'));
+                    const saveBtn = buttons.find(el => el.innerText.includes("Save Entry"));
+                    if (saveBtn) {
+                        saveBtn.click();
+                    }
+                }
+            });
+
+            input.dataset.listenersAttached = 'true';
+        });
+
+        // Auto-select first input (weight) when dialog opens
+        if (inputs.length > 0 && !inputs[0].dataset.autoSelected) {
+            inputs[0].focus();
+            setTimeout(() => inputs[0].select(), 100);
+            inputs[0].dataset.autoSelected = 'true';
+        }
+    }
+
+    const observer = new MutationObserver(() => {
+        attachListeners();
+    });
+
+    observer.observe(doc.body, { childList: true, subtree: true });
+
+    setTimeout(attachListeners, 100);
+    setTimeout(attachListeners, 300);
+    setTimeout(attachListeners, 500);
+    </script>
+    """, height=0, width=0)
+
+
+
 @st.dialog("🕐 Set System Date & Time", width="large")
 def datetime_setup_dialog():
     """Modal dialog for setting system date/time (automatic on startup or manual from admin)"""
@@ -652,7 +749,12 @@ if "time_status_checked" not in st.session_state:
     st.session_state.time_status_checked = False
 if "show_time_dialog" not in st.session_state:
     st.session_state.show_time_dialog = False
-
+if "show_manual_entry_dialog" not in st.session_state:
+    st.session_state.show_manual_entry_dialog = False
+if "manual_entry_type_info" not in st.session_state:
+    st.session_state.manual_entry_type_info = None
+if "manual_dialog_processed" not in st.session_state:
+    st.session_state.manual_dialog_processed = False
 
 # Check system time on first run
 if not st.session_state.time_status_checked:
@@ -944,20 +1046,16 @@ def on_log(type_info):
                 # Log directly without temperature
                 logger_core.log_entry(r.value, src, type_info["name"])
         else:
-            # Scale reading failed or returned zero - set pending manual entry for inline editing
-            st.session_state.pending_manual_entry = {
-                "type_info": type_info,
-                "source": st.session_state.source
-            }
-            st.rerun()
+            # Scale reading failed or returned zero - show manual entry dialog
+            st.session_state.manual_entry_type_info = type_info
+            st.session_state.show_manual_entry_dialog = True
+            st.session_state.manual_dialog_processed = False
     except (OSError, Exception) as e:
-        # Scale device error (e.g., not connected) - set pending manual entry for inline editing
+        # Scale device error (e.g., not connected) - show manual entry dialog
         logging.error(f"Scale error in on_log: {type(e).__name__}: {e}")
-        st.session_state.pending_manual_entry = {
-            "type_info": type_info,
-            "source": st.session_state.source
-        }
-        st.rerun()
+        st.session_state.manual_entry_type_info = type_info
+        st.session_state.show_manual_entry_dialog = True
+        st.session_state.manual_dialog_processed = False
 
 for i, row in enumerate(rows):
     cols = st.columns(len(row), gap="small")
@@ -974,6 +1072,9 @@ for i, row in enumerate(rows):
 if st.session_state.get("show_temp_dialog", False):
     temperature_dialog()
 
+# Show manual entry dialog if needed
+if st.session_state.get("show_manual_entry_dialog", False):
+    manual_weight_entry_dialog()
 
 # Show cheat sheet dialog if requested
 if st.session_state.get("show_cheatsheet", False):
@@ -984,8 +1085,9 @@ if st.session_state.get("show_cheatsheet", False):
 totals_ph = st.empty()
 totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', unsafe_allow_html=True)
 
-# 5. History Table with inline manual entry support
-get_history_display()
+# 5. History Table
+history_ph = st.empty()
+history_ph.markdown(get_history_html(), unsafe_allow_html=True)
 
 # 6. Auto-Refresh - DISABLED when dialog exists
 # The dialog and auto-refresh conflict, so we disable auto-refresh
