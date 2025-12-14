@@ -108,9 +108,17 @@ def generate_report_csv(start_date, end_date):
 
     return buf.getvalue().encode("utf-8")
 
-def send_email_with_attachment(to_email, subject, body, attachment_bytes, filename):
+def send_email_with_attachment(to_email, subject, body, attachment_bytes, filename, note=None):
     """
     Sends an email using credentials from .streamlit/secrets.toml
+    
+    Args:
+        to_email: Recipient email address
+        subject: Email subject line
+        body: Email body text
+        attachment_bytes: CSV file bytes to attach
+        filename: Name of the attachment file
+        note: Optional note to append to the email body
     """
     # 1. Load Secrets
     try:
@@ -127,7 +135,13 @@ def send_email_with_attachment(to_email, subject, body, attachment_bytes, filena
     msg['From'] = SENDER_EMAIL
     msg['To'] = to_email
     msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
+    
+    # Append note to body if provided
+    email_body = body
+    if note:
+        email_body += f"\n\nNote: {note}"
+    
+    msg.attach(MIMEText(email_body, 'plain'))
 
     # 3. Attach CSV
     part = MIMEBase('application', 'octet-stream')

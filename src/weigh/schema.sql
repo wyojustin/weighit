@@ -33,6 +33,7 @@ INSERT OR IGNORE INTO sources (name) VALUES ('Wegmans');
 INSERT OR IGNORE INTO sources (name) VALUES ('Safeway');
 INSERT OR IGNORE INTO sources (name) VALUES ('Good Shepherd donations');
 INSERT OR IGNORE INTO sources (name) VALUES ('FreshFarm St John Neumann');
+INSERT OR IGNORE INTO sources (name) VALUES ('Other');
 
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Produce', 0);
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Dry', 1);

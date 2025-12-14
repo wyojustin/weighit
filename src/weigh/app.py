@@ -903,6 +903,14 @@ with st.sidebar:
         pass
 
     recipient = st.text_input("Recipient Email", value=default_email)
+    
+    # Optional note field
+    email_note = st.text_area(
+        "Optional Note",
+        placeholder="Add a note to include in the email (optional)",
+        help="This note will be appended to the email body",
+        height=100
+    )
 
     # EMAIL BUTTON
     if st.button("Email CSV", type="primary"):
@@ -916,12 +924,16 @@ with st.sidebar:
                     )
                     fname = f"report_{d_start}_{d_end}.csv"
                     
+                    # Pass note to email function (only if not empty)
+                    note_to_send = email_note.strip() if email_note.strip() else None
+                    
                     report_utils.send_email_with_attachment(
                         to_email=recipient,
                         subject=f"Donation Report: {d_start} - {d_end}",
                         body=f"Attached is the donation log for {d_start} to {d_end}.",
                         attachment_bytes=csv_bytes,
-                        filename=fname
+                        filename=fname,
+                        note=note_to_send
                     )
                     st.success("Email Sent!")
                     time.sleep(2) 
