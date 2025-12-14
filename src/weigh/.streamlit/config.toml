@@ -4,3 +4,24 @@ toolbarMode = "minimal"
 
 [ui]
 hideTopBar = true
+
+[server]
+# Performance optimizations for PineTab2 (ARM processor)
+maxUploadSize = 5
+enableCORS = false
+enableXsrfProtection = false
+
+# Disable file watching for better kiosk performance
+fileWatcherType = "none"
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# Faster reruns
+fastReruns = true
+
+[logger]
+level = "warning"
+messageFormat = "%(message)s"

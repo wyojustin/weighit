@@ -44,10 +44,13 @@ st.set_page_config(
 
 # ---------------- helpers ----------------
 
+@st.cache_resource
 def load_css(css_path: Path):
+    """Load CSS once and cache it"""
     if css_path.exists():
         with open(css_path) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+            return f"<style>{f.read()}</style>"
+    return ""
 
 @st.cache_resource
 def get_scale() -> "scale_backend.DymoHIDScale":
@@ -70,37 +73,32 @@ def get_types() -> List[dict]:
         })
     return sorted(types_list, key=lambda x: x["sort_order"])
 
-def get_daily_totals_line() -> str:
-    current_source = st.session_state.get("source", None)
-    view_date = st.session_state.get("view_date", None)
-    if view_date:
-        view_date = view_date.isoformat()
-    totals = db_backend.get_daily_totals(source=current_source, date=view_date)
-    
+@st.cache_data(ttl=2.0)
+def get_daily_totals_line(source: Optional[str], view_date: Optional[str]) -> str:
+    """Cache totals for 2 seconds to reduce DB queries"""
+    totals = db_backend.get_daily_totals(source=source, date=view_date)
+
     # Get all types to show them all (even if 0.0)
     all_types = get_types()
-    
+
     # Build parts list with all types in order
     parts = []
     for type_info in all_types:
         type_name = type_info["name"]
         weight = totals.get(type_name, 0.0)
         parts.append(f"{type_name}: {weight:.1f}")
-    
+
     return " | ".join(parts)
 
-def get_history_html() -> str:
-    """Generates a fixed-height table with exactly 15 rows filtered by current source and date."""
+@st.cache_data(ttl=2.0)
+def get_history_html(source: Optional[str], view_date: Optional[str], has_pending: bool) -> str:
+    """Cache history table for 2 seconds to reduce DB queries"""
     limit = 15
-    current_source = st.session_state.get("source", None)
-    view_date = st.session_state.get("view_date", None)
-    if view_date:
-        view_date = view_date.isoformat()
-    
+
     rows_html = ""
-    
+
     # Check if we have a pending manual entry
-    pending_entry = st.session_state.get("pending_manual_entry", None)
+    pending_entry = st.session_state.get("pending_manual_entry", None) if has_pending else None
     
     # 0. If pending manual entry, add indicator row at top
     if pending_entry:
@@ -121,7 +119,7 @@ def get_history_html() -> str:
             f'</tr>'
         )
     
-    entries = logger_core.get_recent_entries(limit, source=current_source, date=view_date)
+    entries = logger_core.get_recent_entries(limit, source=source, date=view_date)
     
     # 1. Render actual data rows
     for row in entries:
@@ -187,13 +185,10 @@ def display_weight():
         scale = get_scale()
         reading = scale.get_latest()
 
-        # Retry a few times if no reading yet
+        # Single retry only - the scale thread is continuously reading
         if reading is None:
-            for _ in range(3):
-                time.sleep(0.1)
-                reading = scale.get_latest()
-                if reading:
-                    break
+            time.sleep(0.05)
+            reading = scale.get_latest()
 
         weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
     except Exception as e:
@@ -708,7 +703,10 @@ def datetime_setup_dialog():
 
 
 # ---------------- INIT ----------------
-load_css(STYLE_CSS)
+# Load CSS once and cache it
+css_content = load_css(STYLE_CSS)
+if css_content:
+    st.markdown(css_content, unsafe_allow_html=True)
 
 # Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1)
 components.html("""
@@ -964,18 +962,15 @@ with st.sidebar:
 
 # ---------------- MAIN UI ----------------
 
-# 1. Get Weight
+# 1. Get Weight (initial check, actual display uses fragment)
 try:
     scale = get_scale()
-    # Retry a few times if we just started up and haven't got a reading yet
+    # Single quick check - the background thread is continuously reading
     reading = scale.get_latest()
     if reading is None:
-        for _ in range(10):
-            time.sleep(0.1)
-            reading = scale.get_latest()
-            if reading:
-                break
-                
+        time.sleep(0.05)
+        reading = scale.get_latest()
+
     weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
 except Exception as e:
     scale = None
@@ -1119,12 +1114,17 @@ if st.session_state.get("show_cheatsheet", False):
     cheatsheet_dialog()
 
 # 4. Daily Totals
+current_source = st.session_state.get("source", None)
+view_date = st.session_state.get("view_date", None)
+view_date_iso = view_date.isoformat() if view_date else None
+
 totals_ph = st.empty()
-totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line()}</div>', unsafe_allow_html=True)
+totals_ph.markdown(f'<div class="totals-box">{get_daily_totals_line(current_source, view_date_iso)}</div>', unsafe_allow_html=True)
 
 # 5. History Table
+has_pending = st.session_state.get("pending_manual_entry") is not None
 history_ph = st.empty()
-history_ph.markdown(get_history_html(), unsafe_allow_html=True)
+history_ph.markdown(get_history_html(current_source, view_date_iso, has_pending), unsafe_allow_html=True)
 
 # Handle manual weight entry if pending
 if st.session_state.get("pending_manual_entry"):
