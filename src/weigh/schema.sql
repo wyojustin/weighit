@@ -43,3 +43,19 @@ INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Prepared', 4);
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Bread', 5);
 INSERT OR IGNORE INTO types (name, sort_order) VALUES ('Non-food', 6);
 UPDATE types SET requires_temp=1 WHERE name IN ('Dairy', 'Meat', 'Prepared');
+
+-- View for easy querying of logs with source and type names
+CREATE VIEW IF NOT EXISTS view_logs AS
+SELECT 
+    l.id,
+    l.timestamp,
+    l.weight_lb,
+    s.name AS source,
+    t.name AS type,
+    l.deleted,
+    l.temp_pickup_f,
+    l.temp_dropoff_f
+FROM logs l
+LEFT JOIN sources s ON l.source_id = s.id
+LEFT JOIN types t ON l.type_id = t.id
+ORDER BY l.id DESC;
