@@ -21,14 +21,23 @@ logging.basicConfig(
 )
 
 # ---- local imports ----
+import sys
+from pathlib import Path
+
+# Add src directory to path if not already there
+src_dir = Path(__file__).parent.parent
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
 try:
+    from weigh import logger_core, report_utils, db_backend, scale_backend, system_time
+except ImportError:
+    # Fallback for direct execution from weigh directory
     import logger_core
     import report_utils
     import db_backend
     import scale_backend
     import system_time
-except Exception:
-    from weigh import logger_core, report_utils, db_backend, scale_backend, system_time
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 STYLE_CSS = ASSETS_DIR / "style.css"
