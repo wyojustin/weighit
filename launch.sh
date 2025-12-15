@@ -52,6 +52,17 @@ source /home/alarm/miniconda3/bin/activate foodlog
 # Set Python path
 export PYTHONPATH=/home/alarm/weighit/src:$PYTHONPATH
 
+# Performance tuning environment variables for PineTab2
+# WEIGHIT_WEIGHT_UPDATE_INTERVAL: How often weight display updates (in seconds)
+#   - Set to 3 for moderate performance (default)
+#   - Set to 5 for better performance
+#   - Set to 0 to disable auto-update entirely (best performance)
+export WEIGHIT_WEIGHT_UPDATE_INTERVAL="${WEIGHIT_WEIGHT_UPDATE_INTERVAL:-3}"
+
+# WEIGHIT_CACHE_TTL: How long to cache database queries (in seconds)
+#   - Higher = better performance, slightly less fresh data
+export WEIGHIT_CACHE_TTL="${WEIGHIT_CACHE_TTL:-5.0}"
+
 # Change to weighit directory
 cd /home/alarm/weighit
 
