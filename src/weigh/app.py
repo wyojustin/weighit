@@ -35,6 +35,12 @@ STYLE_CSS = ASSETS_DIR / "style.css"
 PANTRY_LOGO = ASSETS_DIR / "slfp_logo.png"
 SCALE_LOGO = ASSETS_DIR / "scale_icon.png"
 
+# Performance configuration for low-power devices (PineTab2)
+# Set WEIGHIT_WEIGHT_UPDATE_INTERVAL to control auto-update frequency (in seconds)
+# Set to 0 to disable auto-updates entirely (weight only updates on button click)
+WEIGHT_UPDATE_INTERVAL = float(os.getenv("WEIGHIT_WEIGHT_UPDATE_INTERVAL", "3"))  # Default: 3 seconds
+CACHE_TTL = float(os.getenv("WEIGHIT_CACHE_TTL", "5.0"))  # Default: 5 seconds
+
 # ---------------- Streamlit page config ----------------
 st.set_page_config(
     page_title="Weigh Kiosk",
@@ -73,9 +79,9 @@ def get_types() -> List[dict]:
         })
     return sorted(types_list, key=lambda x: x["sort_order"])
 
-@st.cache_data(ttl=2.0)
+@st.cache_data(ttl=CACHE_TTL)
 def get_daily_totals_line(source: Optional[str], view_date: Optional[str]) -> str:
-    """Cache totals for 2 seconds to reduce DB queries"""
+    """Cache totals to reduce DB queries (configurable via WEIGHIT_CACHE_TTL)"""
     totals = db_backend.get_daily_totals(source=source, date=view_date)
 
     # Get all types to show them all (even if 0.0)
@@ -90,9 +96,9 @@ def get_daily_totals_line(source: Optional[str], view_date: Optional[str]) -> st
 
     return " | ".join(parts)
 
-@st.cache_data(ttl=2.0)
+@st.cache_data(ttl=CACHE_TTL)
 def get_history_html(source: Optional[str], view_date: Optional[str], has_pending: bool) -> str:
-    """Cache history table for 2 seconds to reduce DB queries"""
+    """Cache history table to reduce DB queries (configurable via WEIGHIT_CACHE_TTL)"""
     limit = 15
 
     rows_html = ""
@@ -178,25 +184,39 @@ def chunk_types(types: List[dict]) -> List[List[dict]]:
     mid = (len(types) + 1) // 2
     return [types[:mid], types[mid:]]
 
-@st.fragment(run_every="1s")
-def display_weight():
-    """Auto-updating weight display that refreshes every second independently"""
-    try:
-        scale = get_scale()
-        reading = scale.get_latest()
-
-        # Single retry only - the scale thread is continuously reading
-        if reading is None:
-            time.sleep(0.05)
+if WEIGHT_UPDATE_INTERVAL > 0:
+    @st.fragment(run_every=f"{WEIGHT_UPDATE_INTERVAL}s")
+    def display_weight():
+        """Auto-updating weight display (configurable via WEIGHIT_WEIGHT_UPDATE_INTERVAL)"""
+        try:
+            scale = get_scale()
             reading = scale.get_latest()
 
-        weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
-    except Exception as e:
-        weight_str = "Err"
-        logging.error(f"Scale error in fragment: {type(e).__name__}: {e}")
+            # Single retry only - the scale thread is continuously reading
+            if reading is None:
+                time.sleep(0.05)
+                reading = scale.get_latest()
 
-    # This markdown will update every second without redrawing the whole app
-    st.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
+            weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
+        except Exception as e:
+            weight_str = "Err"
+            logging.error(f"Scale error in fragment: {type(e).__name__}: {e}")
+
+        # This markdown will update without redrawing the whole app
+        st.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
+else:
+    # No auto-update - display static weight (updates only on button clicks)
+    def display_weight():
+        """Static weight display - no auto-refresh for better performance"""
+        try:
+            scale = get_scale()
+            reading = scale.get_latest()
+            weight_str = f"{reading.value:.1f} lbs" if reading and reading.unit == "lb" else "—"
+        except Exception as e:
+            weight_str = "Err"
+            logging.error(f"Scale error: {type(e).__name__}: {e}")
+
+        st.markdown(f'<div class="weight-box">{weight_str}</div>', unsafe_allow_html=True)
 
 def safe_rerun():
     if hasattr(st, "rerun"):
@@ -708,48 +728,61 @@ css_content = load_css(STYLE_CSS)
 if css_content:
     st.markdown(css_content, unsafe_allow_html=True)
 
-# Inject Keyboard Listener (Ctrl-Z / Ctrl-Y / Alt-F4 / F1)
+# Consolidated JavaScript injection (all UI enhancements in one place for better performance)
 components.html("""
 <script>
-const doc = window.parent.document;
+(function() {
+    const doc = window.parent.document;
 
-// Keyboard event listeners
-doc.addEventListener('keydown', function(e) {
-    // Ctrl+Z = Undo
-    if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+    // 1. Keyboard event listeners (Ctrl-Z / Ctrl-Y / Alt-F4 / F1)
+    doc.addEventListener('keydown', function(e) {
         const buttons = Array.from(doc.querySelectorAll('button'));
-        const undoBtn = buttons.find(el => el.innerText.includes("Undo Last Entry"));
-        if (undoBtn) {
-            undoBtn.click();
+
+        // Ctrl+Z = Undo
+        if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+            const undoBtn = buttons.find(el => el.innerText.includes("Undo Last Entry"));
+            if (undoBtn) undoBtn.click();
+        }
+        // Ctrl+Y = Redo
+        else if (e.ctrlKey && e.key.toLowerCase() === 'y') {
+            const redoBtn = buttons.find(el => el.innerText.includes("Redo Last Undo"));
+            if (redoBtn) redoBtn.click();
+        }
+        // F1 = Show Volunteer Cheat Sheet
+        else if (e.key === 'F1') {
+            e.preventDefault();
+            const cheatsheetBtn = buttons.find(el => el.innerText.includes("View Volunteer Cheat Sheet"));
+            if (cheatsheetBtn) cheatsheetBtn.click();
+        }
+        // Alt+F4 = Close Application
+        else if (e.altKey && e.key === 'F4') {
+            e.preventDefault();
+            const closeBtn = buttons.find(el => el.innerText.includes("Close Application"));
+            if (closeBtn) closeBtn.click();
+        }
+    });
+
+    // 2. Make scale image clickable for refresh
+    function makeScaleClickable() {
+        const buttons = Array.from(doc.querySelectorAll('button'));
+        const refreshBtn = buttons.find(el => el.innerText.includes("refresh_hidden"));
+
+        if (refreshBtn) {
+            refreshBtn.style.display = 'none';
+            const images = Array.from(doc.querySelectorAll('img'));
+            const scaleImg = images[images.length - 1];
+
+            if (scaleImg && !scaleImg.dataset.clickable) {
+                scaleImg.style.cursor = 'pointer';
+                scaleImg.onclick = function() { refreshBtn.click(); };
+                scaleImg.dataset.clickable = 'true';
+            }
         }
     }
-    // Ctrl+Y = Redo
-    if (e.ctrlKey && e.key.toLowerCase() === 'y') {
-        const buttons = Array.from(doc.querySelectorAll('button'));
-        const redoBtn = buttons.find(el => el.innerText.includes("Redo Last Undo"));
-        if (redoBtn) {
-            redoBtn.click();
-        }
-    }
-    // F1 = Show Volunteer Cheat Sheet
-    if (e.key === 'F1') {
-        e.preventDefault();  // Prevent default browser help
-        const buttons = Array.from(doc.querySelectorAll('button'));
-        const cheatsheetBtn = buttons.find(el => el.innerText.includes("View Volunteer Cheat Sheet"));
-        if (cheatsheetBtn) {
-            cheatsheetBtn.click();
-        }
-    }
-    // Alt+F4 = Close Application
-    if (e.altKey && e.key === 'F4') {
-        e.preventDefault();  // Prevent default browser behavior
-        const buttons = Array.from(doc.querySelectorAll('button'));
-        const closeBtn = buttons.find(el => el.innerText.includes("Close Application"));
-        if (closeBtn) {
-            closeBtn.click();
-        }
-    }
-});
+
+    // Run scale clickable setup
+    setTimeout(makeScaleClickable, 100);
+})();
 </script>
 """, height=0, width=0)
 
@@ -1016,38 +1049,6 @@ with c3:
             safe_rerun()
         # Show image with click handler
         st.image(img, use_container_width=False)
-
-# Inject JavaScript to make scale image clickable
-components.html("""
-<script>
-const doc = window.parent.document;
-
-// Find the scale refresh button and the scale image
-function makeScaleClickable() {
-    const buttons = Array.from(doc.querySelectorAll('button'));
-    const refreshBtn = buttons.find(el => el.innerText.includes("refresh_hidden"));
-    
-    if (refreshBtn) {
-        // Hide the button
-        refreshBtn.style.display = 'none';
-        
-        // Find scale image (it's in the last column)
-        const images = Array.from(doc.querySelectorAll('img'));
-        const scaleImg = images[images.length - 1]; // Last image should be scale
-        
-        if (scaleImg) {
-            scaleImg.style.cursor = 'pointer';
-            scaleImg.onclick = function() {
-                refreshBtn.click();
-            };
-        }
-    }
-}
-
-// Run after page loads
-setTimeout(makeScaleClickable, 100);
-</script>
-""", height=0, width=0)
 
 # 3. Buttons
 types = get_types()
